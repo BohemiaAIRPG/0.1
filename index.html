@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bohemia AIRPG</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Заголовок -->
+        <header class="header">
+            <h1>⚔️ BOHEMIA AIRPG</h1>
+            <p class="subtitle">Богемия 1403 • Grok-4-fast-reasoning</p>
+        </header>
+
+        <!-- Экран начала игры -->
+        <div id="startScreen" class="start-screen">
+            <div class="start-content">
+                <h2>🏰 Богемия, 1403 год</h2>
+                <p style="margin-bottom: 20px; color: #a0a0a0; font-style: italic;">
+                    Средневековая Богемия. Жестокий мир рыцарей, крестьян и разбойников.<br>
+                    Ваше путешествие начинается в городе Ратай.
+                </p>
+                
+                <div style="margin-bottom: 15px;">
+                    <label for="playerGender" style="display: block; margin-bottom: 5px;">Пол персонажа:</label>
+                    <select id="playerGender" style="width: 100%; padding: 10px; background: #2a2a2a; color: #fff; border: 1px solid #555; border-radius: 5px;">
+                        <option value="male">Мужской</option>
+                        <option value="female">Женский</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label for="playerName" style="display: block; margin-bottom: 5px;">Имя персонажа:</label>
+                    <input type="text" id="playerName" placeholder="Введите имя" maxlength="20" style="width: 100%; padding: 10px;">
+                </div>
+                
+                <button id="startButton" class="btn btn-primary">Начать приключение</button>
+            </div>
+        </div>
+
+        <!-- Основной экран игры -->
+        <div id="gameScreen" class="game-screen hidden">
+            <!-- Левая панель: Статистика -->
+            <aside class="stats-panel">
+                <div class="character-info">
+                    <h3 id="charName">Странник</h3>
+                    <p class="char-title">???</p>
+                    <p class="location" id="location">📍 Ратай • 12 июн 1403 • утро</p>
+                </div>
+
+                <div class="stats">
+                    <h4>Характеристики</h4>
+                    <div class="stat">
+                        <span>❤️ Здоровье</span>
+                        <div class="progress-bar">
+                            <div id="healthBar" class="progress-fill health" style="width: 100%"></div>
+                        </div>
+                        <span id="healthText">100/100</span>
+                    </div>
+                    <div class="stat">
+                        <span>💪 Выносливость</span>
+                        <div class="progress-bar">
+                            <div id="staminaBar" class="progress-fill stamina" style="width: 100%"></div>
+                        </div>
+                        <span id="staminaText">100/100</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>💰 Монеты:</span>
+                        <strong id="coins">25</strong>
+                    </div>
+                    <div class="stat-row">
+                        <span>🛡️ Репутация:</span>
+                        <strong id="reputation">50/100</strong>
+                    </div>
+                </div>
+
+                <div class="equipment">
+                    <h4>Экипировка</h4>
+                    <div class="equip-item">
+                        <span>⚔️</span>
+                        <div>
+                            <p id="weaponName">железный меч</p>
+                            <div class="condition-bar">
+                                <div id="weaponCondition" class="condition-fill" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="equip-item">
+                        <span>🛡️</span>
+                        <div>
+                            <p id="armorName">кожаный доспех</p>
+                            <div class="condition-bar">
+                                <div id="armorCondition" class="condition-fill" style="width: 100%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Центральная панель: Описание и выборы -->
+            <main class="main-panel">
+                <div class="scene-container">
+                    <div class="scene-text" id="sceneDescription">
+                        <p>Загрузка...</p>
+                    </div>
+                </div>
+
+                <div class="choices-container">
+                    <h4>🎮 Выберите действие:</h4>
+                    <div id="choicesList"></div>
+                    <div class="custom-choice">
+                        <input type="text" id="customChoice" placeholder="💡 Или введите свой вариант действия...">
+                        <button id="customChoiceBtn" class="btn btn-secondary">Отправить</button>
+                    </div>
+                </div>
+
+                <div id="loadingIndicator" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>🧠 AI создаёт вашу историю...</p>
+                </div>
+            </main>
+
+            <!-- Правая панель: Квесты и История -->
+            <aside class="quest-panel">
+                <div class="panel-section">
+                    <h4>📜 Квесты</h4>
+                    <div id="questsList" class="quests-list">
+                        <p class="empty-text">Пока нет активных квестов</p>
+                    </div>
+                </div>
+
+                <div class="panel-section">
+                    <button class="history-btn" id="historyBtn">
+                        <span>📖 История</span>
+                    </button>
+                </div>
+
+                <div class="panel-section">
+                    <div class="save-buttons">
+                        <button class="save-btn" id="saveBtn">
+                            <span>💾 Сохранить</span>
+                        </button>
+                        <button class="load-btn" id="loadBtn">
+                            <span>📂 Загрузить</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="character">Персонаж</button>
+                    <button class="tab-btn" data-tab="skills">Навыки</button>
+                    <button class="tab-btn" data-tab="inventory">Инвентарь</button>
+                </div>
+
+                <div class="tab-content active" id="characterTab">
+                    <div id="characterInfo"></div>
+                </div>
+
+                <div class="tab-content" id="skillsTab">
+                    <div id="skillsList"></div>
+                </div>
+
+                <div class="tab-content" id="inventoryTab">
+                    <div id="inventoryList"></div>
+                </div>
+            </aside>
+        </div>
+
+        <!-- Модальное окно истории -->
+        <div id="historyModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📖 История приключений</h3>
+                    <button class="modal-close" id="closeHistoryModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="historyList" class="history-list">
+                        <p class="empty-text">Начало приключения</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно загрузки -->
+        <div id="loadModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📂 Загрузить сохранение</h3>
+                    <button class="modal-close" id="closeLoadModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="savesList" class="saves-list">
+                        <p class="empty-text">Загрузка сохранений...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Скрытый input для выбора файла -->
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+
+    <script src="client.js"></script>
+</body>
+</html>
+
+
+
+
