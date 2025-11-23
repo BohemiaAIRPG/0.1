@@ -8,7 +8,7 @@ import { join } from 'path';
 const PORT = process.env.PORT || 3000;
 const COMET_API_KEY = 'sk-jwPgtUPNYyGb7YoirTUy26AKqmdFVzHLsHye55rV6OxIYDMK';
 const COMET_API_BASE = 'https://api.cometapi.com/v1';
-const MODEL_NAME = 'grok-4-1-fast-reasoning';
+const MODEL_NAME = 'grok-4-fast-reasoning';
 
 // HTTP сервер для статики
 const httpServer = createServer((req, res) => {
