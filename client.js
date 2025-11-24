@@ -5,25 +5,8 @@ let currentChoices = [];
 let currentSessionId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Проверяем наличие сохранения при загрузке страницы
-    const savedGame = loadGameFromLocalStorage();
-    if (savedGame && savedGame.gameState) {
-        const restore = confirm('🎮 Обнаружено сохранение игры!\n\nВосстановить последний прогресс?');
-        if (restore) {
-            restoreGame(savedGame);
-            return;
-        } else {
-            clearLocalStorageSave();
-        }
-    }
-    
-    const startButton = document.getElementById('startButton');
-    const playerNameInput = document.getElementById('playerName');
-    
-    startButton.addEventListener('click', startGame);
-    playerNameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') startGame();
-    });
+    console.log('🏁 Test phase 0.1 ended. Game access disabled.');
+    // Logic for restore and start is disabled.
 });
 
 function startGame() {
