@@ -227,11 +227,19 @@ body {
 }
 
 .progress-fill.health {
-    background: linear-gradient(90deg, #ffffff 0%, #d0d0d0 100%);
+    background: linear-gradient(90deg, #ff4d4d 0%, #ff8080 100%);
 }
 
 .progress-fill.stamina {
-    background: linear-gradient(90deg, #a0a0a0 0%, #808080 100%);
+    background: linear-gradient(90deg, #ffd700 0%, #ffff80 100%);
+}
+
+.progress-fill.hunger {
+    background: linear-gradient(90deg, #ff9800 0%, #ffc107 100%);
+}
+
+.progress-fill.fatigue {
+    background: linear-gradient(90deg, #9c27b0 0%, #e040fb 100%);
 }
 
 .stat span:last-child {

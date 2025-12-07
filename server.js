@@ -156,6 +156,8 @@ function createGameState(name, gender = 'male') {
         stamina: 100,
         maxStamina: 100,
         coins: 0,
+        hunger: 0,     // 0 = сыт, 100 = голодает (отнимает здоровье)
+        fatigue: 0,    // 0 = отдохнувший, 100 = измотан (отнимает выносливость)
         reputation: 25,
         morality: 50, // Нейтральная мораль
         equipment: {

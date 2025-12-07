@@ -758,6 +758,24 @@ function updateUI() {
     document.getElementById('staminaBar').style.width = staminaPercent + '%';
     document.getElementById('staminaText').textContent = `${gameState.stamina}/${gameState.maxStamina}`;
 
+    // Hunger
+    const hunger = gameState.hunger || 0;
+    const hungerBar = document.getElementById('hungerBar');
+    const hungerText = document.getElementById('hungerText');
+    if (hungerBar && hungerText) {
+        hungerBar.style.width = hunger + '%';
+        hungerText.textContent = `${hunger}/100`;
+    }
+
+    // Fatigue
+    const fatigue = gameState.fatigue || 0;
+    const fatigueBar = document.getElementById('fatigueBar');
+    const fatigueText = document.getElementById('fatigueText');
+    if (fatigueBar && fatigueText) {
+        fatigueBar.style.width = fatigue + '%';
+        fatigueText.textContent = `${fatigue}/100`;
+    }
+
     document.getElementById('coins').textContent = gameState.coins;
     document.getElementById('reputation').textContent = `${gameState.reputation}/100`;
 
