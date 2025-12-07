@@ -493,6 +493,9 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
    - "Съел яблоко" -> "satiety": 10
    - "Поспал" -> "energy": 40, "stamina": 30
    - timeChange АВТОМАТИЧЕСКИ их снижает. НЕ снижай их вручную за время.
+4. СМЫСЛ ШКАЛ (Для понимания контекста):
+   - satiety: 100 = СЫТ (Отлично), 0 = ГОЛОД (Смерть).
+   - energy: 100 = БОДР (Отлично), 0 = ИСТОЩЕН (Обморок).
 
 ⚠️ ИНВЕНТАРЬ newItems:
 - КАЖДЫЙ предмет ОТДЕЛЬНО! НЕ "Штаны и рубаха", а [{name:"Штаны"}, {name:"Рубаха"}]
@@ -1151,6 +1154,18 @@ wss.on('connection', (ws) => {
                     }));
                     return;
                 }
+
+                // 🩹 PATCH: Fix old saves missing new stats
+                if (loadedGameState.satiety === undefined) {
+                    console.warn('⚠️ Save file missing satiety, defaulting to 20');
+                    loadedGameState.satiety = 20;
+                }
+                if (loadedGameState.energy === undefined) {
+                    console.warn('⚠️ Save file missing energy, defaulting to 55');
+                    loadedGameState.energy = 55;
+                }
+
+                gameSessions.set(sessionId, loadedGameState);
 
                 if (!loadedGameState.name) {
                     console.error('❌ В gameState отсутствует поле name!');
