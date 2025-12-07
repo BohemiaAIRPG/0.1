@@ -77,6 +77,7 @@ let mapOffsetX = 0;
 let mapOffsetY = 0;
 let isDraggingMap = false;
 let startDragX, startDragY;
+let hoveredLocation = null; // Track what we are hovering over
 
 function initMapHandlers() {
     const mapBtn = document.getElementById('mapBtn');
@@ -104,11 +105,12 @@ function initMapHandlers() {
         drawMap();
     });
 
-    // Drag
+    // Drag & Hover
     canvas.addEventListener('mousedown', (e) => {
         isDraggingMap = true;
         startDragX = e.clientX - mapOffsetX;
         startDragY = e.clientY - mapOffsetY;
+        canvas.style.cursor = 'grabbing';
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -116,12 +118,61 @@ function initMapHandlers() {
             mapOffsetX = e.clientX - startDragX;
             mapOffsetY = e.clientY - startDragY;
             drawMap();
+            return;
+        }
+
+        // Hover Check
+        if (gameState && gameState.worldMap && canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const centerX = canvas.width / 2 + mapOffsetX;
+            const centerY = canvas.height / 2 + mapOffsetY;
+
+            let found = null;
+            // Check locations (reverse to catch top-most if overlap)
+            for (let i = gameState.worldMap.length - 1; i >= 0; i--) {
+                const loc = gameState.worldMap[i];
+                const x = centerX + (loc.x * 30 * mapScale); // 30px spacing
+                const y = centerY + (loc.y * 30 * mapScale);
+                const size = 20 * mapScale; // Hitbox radius
+
+                const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
+                if (dist < size) {
+                    found = loc;
+                    break;
+                }
+            }
+
+            if (hoveredLocation !== found) {
+                hoveredLocation = found;
+                canvas.style.cursor = found ? 'pointer' : 'default';
+                drawMap();
+            }
         }
     });
 
     window.addEventListener('mouseup', () => {
         isDraggingMap = false;
+        canvas.style.cursor = 'default';
     });
+}
+
+function getMarkerIcon(name) {
+    const lower = name.toLowerCase();
+    if (lower.includes('корчма') || lower.includes('таверна')) return '🍺';
+    if (lower.includes('конюшня') || lower.includes('лошад')) return '🐎';
+    if (lower.includes('рынок') || lower.includes('лавк') || lower.includes('торг')) return '💰';
+    if (lower.includes('кузн')) return '⚒️';
+    if (lower.includes('лес') || lower.includes('чаща')) return '🌲';
+    if (lower.includes('замок') || lower.includes('крепость')) return '🏰';
+    if (lower.includes('церковь') || lower.includes('храм')) return '⛪';
+    if (lower.includes('дом')) return '🏠';
+    if (lower.includes('пещер')) return '🦇';
+    if (lower.includes('лагерь')) return '⛺';
+    if (lower.includes('начало')) return '🔵';
+    return '📍'; // Default
 }
 
 function drawMap() {
@@ -138,42 +189,88 @@ function drawMap() {
     // Clear
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Grid (Fog of War style)
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    // Draw Grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
     ctx.lineWidth = 1;
-    const gridSize = 50 * mapScale;
+    const step = 30 * mapScale;
 
     // Draw locations
     gameState.worldMap.forEach(loc => {
-        const x = centerX + (loc.x * 20 * mapScale); // 1 coordinate unit = 20px
-        const y = centerY + (loc.y * 20 * mapScale); // Y goes down in Canvas
+        const x = centerX + (loc.x * 30 * mapScale);
+        const y = centerY + (loc.y * 30 * mapScale);
 
-        // Draw Dot
+        // Draw Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.beginPath();
-        ctx.arc(x, y, 5 * mapScale, 0, Math.PI * 2);
-        ctx.fillStyle = loc.name === "Начало Пути" ? '#4a90e2' : '#ffd700'; // Start blue, others gold
+        ctx.arc(x, y + 5 * mapScale, 10 * mapScale, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
-        ctx.stroke();
 
-        // Draw Name
+        // Draw Icon
+        const icon = getMarkerIcon(loc.name);
         ctx.fillStyle = '#ffffff';
-        ctx.font = `${12 * mapScale}px 'Segoe UI'`;
+        ctx.font = `${24 * mapScale}px "Segoe UI Emoji", "Arial"`;
         ctx.textAlign = 'center';
-        ctx.fillText(loc.name, x, y - 10 * mapScale);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(icon, x, y);
     });
 
-    // Draw Player Arrow
+    // Draw Player Arrow (Always on top of map but below tooltip)
     ctx.fillStyle = '#ff4444';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY - 8 * mapScale);
-    ctx.lineTo(centerX - 6 * mapScale, centerY + 6 * mapScale);
-    ctx.lineTo(centerX + 6 * mapScale, centerY + 6 * mapScale);
+    ctx.moveTo(centerX, centerY + 10 * mapScale);
+    ctx.lineTo(centerX - 8 * mapScale, centerY - 10 * mapScale);
+    ctx.lineTo(centerX + 8 * mapScale, centerY - 10 * mapScale);
+    ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+
+    // Draw Tooltip if hovering
+    if (hoveredLocation) {
+        const loc = hoveredLocation;
+        const x = centerX + (loc.x * 30 * mapScale);
+        const y = centerY + (loc.y * 30 * mapScale);
+
+        const padding = 10;
+        const fontSize = 14;
+        ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+        const textWidth = ctx.measureText(loc.name).width;
+
+        // Tooltip description? (Optional, just name for now to keep it clean)
+        // const desc = loc.description || ""; 
+
+        const boxWidth = textWidth + padding * 2;
+        const boxHeight = fontSize + padding * 2;
+        const boxX = x - boxWidth / 2;
+        const boxY = y - 40 * mapScale - boxHeight; // Above marker
+
+        // Box Background
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
+        ctx.strokeStyle = '#4a90e2';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        // Text
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(loc.name, boxX + boxWidth / 2, boxY + boxHeight / 2);
+
+        // Triangle pointer
+        ctx.beginPath();
+        ctx.moveTo(x, boxY + boxHeight);
+        ctx.lineTo(x - 5, boxY + boxHeight + 5);
+        ctx.lineTo(x + 5, boxY + boxHeight + 5);
+        ctx.fillStyle = '#4a90e2';
+        ctx.fill();
+    }
 
     // Update Coords UI
-    document.getElementById('mapCoordinates').textContent = `Zoom: ${mapScale.toFixed(1)}x`;
+    document.getElementById('mapCoordinates').textContent = `Scale: ${mapScale.toFixed(1)}x`;
 }
 
 function handleMessage(data) {
