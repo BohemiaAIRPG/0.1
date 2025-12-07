@@ -649,8 +649,14 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
         }
 
         // 1. Форматирование текста
+        // Очищаем от случайных HTML-тегов из AI (например "dialogue-speech">...")
+        let cleanDescription = (description || '')
+            .replace(/<[^>]*>/g, '') // Remove any HTML tags
+            .replace(/"dialogue-speech">/g, '') // Remove broken class references
+            .replace(/class="[^"]*">/g, ''); // Remove any class="..."> leftovers
+
         // Разбиваем на абзацы
-        let paragraphs = (description || '').split('\n\n').filter(p => p.trim());
+        let paragraphs = cleanDescription.split('\n\n').filter(p => p.trim());
 
         // 2. Подсветка прямой речи (если это диалог или просто текст с речью)
         // Регулярка для кириллических «...» и обычных "..."
