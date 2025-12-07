@@ -605,6 +605,39 @@ function parseAIResponse(text) {
             });
         }
 
+        // === STRICT NUMERIC VALIDATION ===
+        // Ensure all numeric fields are actually numbers, default to 0 if not
+        const numericFields = ['health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange'];
+        numericFields.forEach(field => {
+            if (typeof parsed[field] !== 'number' || isNaN(parsed[field])) {
+                if (parsed[field] !== undefined) {
+                    console.warn(`⚠️ Field '${field}' is not a number:`, parsed[field], '→ Setting to 0');
+                }
+                parsed[field] = 0;
+            }
+        });
+
+        // Clamp extreme values to prevent abuse
+        if (parsed.coins > 100) {
+            console.warn(`⚠️ Suspicious coins value: ${parsed.coins} → Clamping to 100`);
+            parsed[coins] = 100;
+        }
+        if (parsed.coins < -100) parsed.coins = -100;
+        if (parsed.health > 50) parsed.health = 50;
+        if (parsed.health < -50) parsed.health = -50;
+        if (parsed.reputation > 10) parsed.reputation = 10;
+        if (parsed.reputation < -10) parsed.reputation = -10;
+
+        // Validate skillXP
+        if (!parsed.skillXP || typeof parsed.skillXP !== 'object') {
+            parsed.skillXP = {};
+        }
+
+        // Validate characterUpdate
+        if (!parsed.characterUpdate || typeof parsed.characterUpdate !== 'object') {
+            parsed.characterUpdate = { recentEvents: [], importantChoices: [], relationships: {}, milestone: '' };
+        }
+
         return parsed;
     } catch (error) {
         console.error('❌ Parse error! Raw text:', text);

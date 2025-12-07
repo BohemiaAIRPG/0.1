@@ -4,6 +4,25 @@ let currentScene = '';
 let currentChoices = [];
 let currentSessionId = null;
 
+// === GLOBAL ERROR HANDLERS ===
+// Catch any unhandled errors and log them instead of crashing
+window.onerror = function (message, source, lineno, colno, error) {
+    console.error('🔴 Global Error:', { message, source, lineno, colno, error });
+    return true; // Prevent default browser error handling
+};
+
+window.onunhandledrejection = function (event) {
+    console.error('🔴 Unhandled Promise Rejection:', event.reason);
+    event.preventDefault();
+};
+
+// Safe DOM query helper
+function safeGetElement(id) {
+    const el = document.getElementById(id);
+    if (!el) console.warn(`⚠️ Element #${id} not found`);
+    return el;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🚀 Client initialized');
 
