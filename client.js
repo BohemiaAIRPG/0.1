@@ -63,11 +63,11 @@ function startGame() {
     document.getElementById('gameScreen').classList.remove('hidden');
 
     setTimeout(() => {
-        initTabHandlers();
+        initModalHandlers(); // Replaces initTabHandlers
         initCustomChoiceHandlers();
         initHistoryModal();
-        initMapHandlers(); // Map Handler
-        initInventoryHandlers(); // Inventory Handler
+        initMapHandlers();
+        initInventoryHandlers();
         initSaveLoadHandlers();
     }, 100);
 }
@@ -158,6 +158,45 @@ function initMapHandlers() {
         isDraggingMap = false;
         canvas.style.cursor = 'default';
     });
+}
+
+function initModalHandlers() {
+    // Character Modal
+    setupModal('characterBtn', 'characterModal', 'closeCharacterModal', () => updateCharacter());
+
+    // Skills Modal
+    setupModal('skillsBtn', 'skillsModal', 'closeSkillsModal', () => updateSkills());
+
+    // Inventory Modal
+    setupModal('inventoryBtn', 'inventoryModal', 'closeInventoryModal', () => updateInventory());
+}
+
+function setupModal(btnId, modalId, closeBtnId, onOpenCallback) {
+    const btn = document.getElementById(btnId);
+    const modal = document.getElementById(modalId);
+    const closeBtn = document.getElementById(closeBtnId);
+
+    if (btn && modal) {
+        btn.addEventListener('click', () => {
+            modal.classList.remove('hidden');
+            if (onOpenCallback) onOpenCallback();
+        });
+    }
+
+    if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+    }
+
+    // Close on click outside
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    }
 }
 
 function getMarkerIcon(name) {
@@ -1038,34 +1077,6 @@ function updateHistory() {
     });
 }
 
-function initTabHandlers() {
-    const tabButtons = document.querySelectorAll('.tab-btn');
-    tabButtons.forEach(btn => {
-        const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-
-        newBtn.addEventListener('click', () => {
-            const tab = newBtn.dataset.tab;
-
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-            newBtn.classList.add('active');
-
-            const tabContent = document.getElementById(tab + 'Tab');
-            if (tabContent) {
-                tabContent.classList.add('active');
-            }
-
-            if (gameState) {
-                if (tab === 'character') updateCharacter();
-                else if (tab === 'skills') updateSkills();
-                else if (tab === 'inventory') updateInventory();
-                else if (tab === 'history') updateHistory();
-            }
-        });
-    });
-}
 
 function initCustomChoiceHandlers() {
     const customChoiceBtn = document.getElementById('customChoiceBtn');
