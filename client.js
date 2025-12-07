@@ -1120,6 +1120,9 @@ function updateInventory() {
             ${item.quantity > 1 ? `<div class="item-count">${item.quantity}</div>` : ''}
         `;
 
+        // Native tooltip
+        slot.title = item.name;
+
         slot.addEventListener('click', () => {
             // Select logic
             document.querySelectorAll('.inventory-slot').forEach(s => s.classList.remove('selected'));

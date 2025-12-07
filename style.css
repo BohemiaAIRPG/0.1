@@ -141,6 +141,18 @@ body {
     box-shadow: 0 5px 20px rgba(128, 128, 128, 0.4);
 }
 
+/* Inventory Slot Styles */
+.inventory-slot {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.inventory-slot:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    border-color: rgba(74, 144, 226, 0.5);
+}
+
 /* Игровой экран */
 .game-screen {
     display: grid;
