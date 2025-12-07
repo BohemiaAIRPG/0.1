@@ -770,6 +770,167 @@ body {
     }
 }
 
+/* Экран смерти */
+.game-over-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(180deg, #000000 0%, #1a1a1a 50%, #000000 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    z-index: 2000;
+}
+
+.game-over-content {
+    width: 100%;
+    max-width: 900px;
+    text-align: center;
+}
+
+.game-over-title {
+    color: #ffffff;
+    font-size: 72px;
+    font-weight: 300;
+    letter-spacing: 10px;
+    margin-bottom: 40px;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+    animation: fadeIn 1s ease-in;
+}
+
+.game-over-reason {
+    color: #c0c0c0;
+    font-size: 24px;
+    font-weight: 300;
+    margin-bottom: 40px;
+    font-style: italic;
+}
+
+.game-over-description {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    margin-bottom: 40px;
+    text-align: left;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.game-over-description p {
+    color: #e0e0e0;
+    line-height: 1.8;
+    margin-bottom: 20px;
+    font-size: 1.1em;
+}
+
+.game-over-stats {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 30px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 40px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.stat-box {
+    text-align: center;
+}
+
+.stat-label {
+    color: #808080;
+    font-size: 14px;
+    margin-bottom: 5px;
+}
+
+.stat-value {
+    color: #ffffff;
+    font-size: 32px;
+    font-weight: 300;
+}
+
+.restart-btn {
+    padding: 20px 50px;
+    font-size: 1.5em;
+    background: transparent;
+    border: 2px solid #ffffff;
+    color: #ffffff;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    margin-bottom: 40px;
+}
+
+.restart-btn:hover {
+    background: #ffffff;
+    color: #000000;
+    box-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+    transform: scale(1.05);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Адаптив для экрана смерти */
+@media (max-width: 768px) {
+    .game-over-container {
+        padding: 20px;
+        justify-content: flex-start; /* Чтобы можно было скроллить */
+    }
+
+    .game-over-title {
+        font-size: 36px;
+        letter-spacing: 5px;
+        margin-top: 40px;
+        margin-bottom: 20px;
+    }
+
+    .game-over-reason {
+        font-size: 18px;
+        margin-bottom: 20px;
+    }
+
+    .game-over-description {
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .game-over-description p {
+        font-size: 1em;
+    }
+
+    .game-over-stats {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        padding: 20px;
+    }
+
+    .stat-value {
+        font-size: 24px;
+    }
+
+    .restart-btn {
+        padding: 15px 30px;
+        font-size: 1.2em;
+    }
+}
+
 
 
 

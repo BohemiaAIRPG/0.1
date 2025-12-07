@@ -17,16 +17,13 @@
         <!-- Экран начала игры -->
         <div id="startScreen" class="start-screen">
             <div class="start-content">
-                <h2>🏁 Тестирование завершено</h2>
-                <div style="margin: 30px 0; color: #e0e0e0; line-height: 1.6;">
-                    <p style="margin-bottom: 15px;">Ребята, тестирование версии 0.1 длилось 10 часов и подошло к концу (закончились токены AI).</p>
-                    <p style="margin-bottom: 15px;">Спасибо сообществу <strong>DTF</strong> за теплую реакцию и отзывы! ❤️</p>
-                    <p>Очень скоро предоставлю на тест <strong>версию 0.2</strong> в следующем посте.</p>
-                </div>
-                
-                <a href="https://dtf.ru/id992595" target="_blank" style="display: inline-block; padding: 15px 30px; background: #4a90e2; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px;">
-                    🔔 Подписаться на меня на DTF
-                </a>
+                <h2>Начало приключения</h2>
+                <input type="text" id="playerName" placeholder="Имя персонажа" maxlength="15">
+                <select id="playerGender">
+                    <option value="male">Мужчина</option>
+                    <option value="female">Женщина</option>
+                </select>
+                <button class="btn btn-primary" onclick="startGame()">⚔️ Начать игру</button>
             </div>
         </div>
 

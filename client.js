@@ -5,23 +5,28 @@ let currentChoices = [];
 let currentSessionId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🏁 Test phase 0.1 ended. Game access disabled.');
-    // Logic for restore and start is disabled.
+    console.log('🚀 Client initialized');
+
+    // Проверка на восстановление сессии
+    const savedSessionId = localStorage.getItem('gameSessionId');
+    if (savedSessionId) {
+        console.log('Found saved session, attempting to restore...');
+        // restoreSession(savedSessionId); // Пока просто логируем, старт через кнопку
+    }
 });
 
 function startGame() {
     const playerName = document.getElementById('playerName').value.trim() || 'Странник';
     const playerGender = document.getElementById('playerGender').value || 'male';
-    
+
     console.log(`🎮 Начало игры: ${playerName} (${playerGender})`);
-    
+
     // Очищаем старое сохранение при старте новой игры
     clearLocalStorageSave();
-    
+
     // Подключение к WebSocket
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}`);
-    
+    ws = new WebSocket('ws://localhost:3000');
+
     ws.onopen = () => {
         console.log('Connected to server');
         ws.send(JSON.stringify({
@@ -30,31 +35,31 @@ function startGame() {
             gender: playerGender
         }));
     };
-    
+
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        
+
         // Сохраняем sessionId из ответа сервера
         if (data.sessionId) {
             currentSessionId = data.sessionId;
         }
-        
+
         handleMessage(data);
     };
-    
+
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         alert('Ошибка подключения к серверу!');
     };
-    
+
     ws.onclose = () => {
         console.log('Disconnected from server');
     };
-    
+
     // Показываем игровой экран
     document.getElementById('startScreen').classList.add('hidden');
     document.getElementById('gameScreen').classList.remove('hidden');
-    
+
     setTimeout(() => {
         initTabHandlers();
         initCustomChoiceHandlers();
@@ -65,7 +70,7 @@ function startGame() {
 
 function handleMessage(data) {
     console.log('📨 Получено сообщение:', data.type);
-    
+
     if (data.type === 'connected') {
         currentSessionId = data.sessionId;
         console.log(`🔗 Подключено к серверу, SessionID: ${currentSessionId}`);
@@ -73,7 +78,7 @@ function handleMessage(data) {
         gameState = data.gameState;
         currentScene = data.description;
         currentChoices = data.choices;
-        
+
         saveGameToLocalStorage();
         updateUI();
         displayScene(currentScene, currentChoices, data.isDialogue, data.speakerName);
@@ -86,10 +91,10 @@ function handleMessage(data) {
         gameState = data.gameState;
         currentScene = data.description;
         currentChoices = data.choices;
-        
+
         console.log('✅ Сохранение успешно загружено и восстановлено!');
         console.log(`🔗 SessionID обновлен: ${currentSessionId}`);
-        
+
         saveGameToLocalStorage();
         updateUI();
         displayScene(currentScene, currentChoices);
@@ -106,43 +111,17 @@ function handleMessage(data) {
 
 function showGameOver(data) {
     console.log('💀 GAME OVER:', data.deathReason);
-    
+
     // Очищаем сохранение
     clearLocalStorageSave();
-    
+
     // Преобразуем описание смерти с абзацами
     const paragraphs = data.description.split('\n\n').filter(p => p.trim());
     const formattedDescription = paragraphs.map(p => `<p style="color: #e0e0e0; line-height: 1.8; margin-bottom: 20px; font-size: 1.1em;">${p.trim()}</p>`).join('');
-    
-    // Создаём экран смерти на весь экран
+
+    // Создаем экран смерти с использованием классов из CSS
     const gameScreen = document.getElementById('gameScreen');
     gameScreen.innerHTML = `
-        <div style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: linear-gradient(180deg, #000000 0%, #1a1a1a 50%, #000000 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 40px;
-            box-sizing: border-box;
-            overflow-y: auto;
-        ">
-            <div style="
-                width: 100%;
-                max-width: 900px;
-                text-align: center;
-            ">
-                <!-- БОЛЬШАЯ НАДПИСЬ СВЕРХУ -->
-                <h1 style="
-                    color: #ffffff;
-                    font-size: 72px;
-                    font-weight: 300;
-                    letter-spacing: 10px;
                     margin-bottom: 40px;
                     text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
                     animation: fadeIn 1s ease-in;
@@ -240,12 +219,12 @@ function makeChoice(choice) {
         alert('Нет подключения к серверу!');
         return;
     }
-    
+
     console.log(`🎯 Выбор игрока: ${choice}`);
-    
+
     // Сразу показываем "Мир реагирует..." с миганием
     showWorldReacting();
-    
+
     // Отключаем все кнопки выбора
     const choicesList = document.getElementById('choicesList');
     if (choicesList) {
@@ -255,7 +234,7 @@ function makeChoice(choice) {
             btn.style.cursor = 'not-allowed';
         });
     }
-    
+
     ws.send(JSON.stringify({
         type: 'choice',
         choice: choice,
@@ -266,7 +245,7 @@ function makeChoice(choice) {
 function showWorldReacting() {
     const sceneDescriptionDiv = document.getElementById('sceneDescription');
     if (!sceneDescriptionDiv) return;
-    
+
     sceneDescriptionDiv.innerHTML = `
         <p class="world-reacting" style="text-align: center; font-size: 1.3em; color: #ffd700; margin: 50px 0; font-weight: 500; letter-spacing: 1px;">
             🌍 Мир реагирует на ваши действия...
@@ -276,11 +255,11 @@ function showWorldReacting() {
 
 function displayScene(description, choices, isDialogue = false, speakerName = '') {
     const sceneDescriptionDiv = document.getElementById('sceneDescription');
-    
+
     // Преобразуем \n\n в HTML абзацы для правильного отображения
     const paragraphs = description.split('\n\n').filter(p => p.trim());
     const formattedDescription = paragraphs.map(p => `<p style="margin-bottom: 15px; line-height: 1.6;">${p.trim()}</p>`).join('');
-    
+
     if (isDialogue && speakerName) {
         sceneDescriptionDiv.innerHTML = `
             <div style="border-left: 4px solid #4a90e2; padding-left: 15px; margin: 10px 0;">
@@ -293,42 +272,42 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
     } else {
         sceneDescriptionDiv.innerHTML = formattedDescription;
     }
-    
+
     const choicesList = document.getElementById('choicesList');
     const choicesHeader = document.querySelector('.choices-container h4');
-    
+
     if (isDialogue) {
         choicesHeader.textContent = '💬 Выберите ответ:';
     } else {
         choicesHeader.textContent = '🎮 Выберите действие:';
     }
-    
+
     choicesList.innerHTML = '';
-    
+
     choices.forEach((choice, index) => {
         const choiceBtn = document.createElement('button');
         choiceBtn.className = 'choice-btn';
-        
+
         if (isDialogue) {
             choiceBtn.style.borderLeft = '4px solid #4a90e2';
             choiceBtn.innerHTML = `<span style="color: #4a90e2;">➤</span> ${choice}`;
         } else {
             choiceBtn.textContent = `${index + 1}. ${choice}`;
         }
-        
+
         choiceBtn.addEventListener('click', () => makeChoice(choice));
-        
+
         choicesList.appendChild(choiceBtn);
     });
 }
 
 function updateUI() {
     if (!gameState) return;
-    
+
     saveGameToLocalStorage();
-    
+
     document.getElementById('charName').textContent = gameState.name;
-    
+
     let dateText = '';
     if (gameState.date) {
         const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -336,25 +315,25 @@ function updateUI() {
     } else {
         dateText = `${gameState.time} • День ${gameState.day || 1}`;
     }
-    
+
     document.getElementById('location').textContent = `📍 ${gameState.location} • ${dateText}`;
-    
+
     const healthPercent = (gameState.health / gameState.maxHealth) * 100;
     document.getElementById('healthBar').style.width = healthPercent + '%';
     document.getElementById('healthText').textContent = `${gameState.health}/${gameState.maxHealth}`;
-    
+
     const staminaPercent = (gameState.stamina / gameState.maxStamina) * 100;
     document.getElementById('staminaBar').style.width = staminaPercent + '%';
     document.getElementById('staminaText').textContent = `${gameState.stamina}/${gameState.maxStamina}`;
-    
+
     document.getElementById('coins').textContent = gameState.coins;
     document.getElementById('reputation').textContent = `${gameState.reputation}/100`;
-    
+
     document.getElementById('weaponName').textContent = gameState.equipment.weapon.name;
     document.getElementById('weaponCondition').style.width = gameState.equipment.weapon.condition + '%';
     document.getElementById('armorName').textContent = gameState.equipment.armor.name;
     document.getElementById('armorCondition').style.width = gameState.equipment.armor.condition + '%';
-    
+
     // Обновляем все вкладки чтобы данные были актуальными
     updateInventory();
     updateSkills();
@@ -363,22 +342,22 @@ function updateUI() {
 
 function updateCharacter() {
     if (!gameState) return;
-    
+
     const characterInfo = document.getElementById('characterInfo');
     if (!characterInfo) return;
-    
+
     // Формируем список знакомств и отношений
     let relationshipsHTML = '';
     const relationships = gameState.character.relationships || {};
     const relationshipKeys = Object.keys(relationships);
-    
+
     if (relationshipKeys.length > 0) {
         relationshipsHTML = `
             <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
                 <h5 style="color: #4a90e2; margin-bottom: 10px; font-size: 1.1em;">👥 Знакомства и отношения:</h5>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
         `;
-        
+
         relationshipKeys.forEach(name => {
             const relation = relationships[name];
             relationshipsHTML += `
@@ -388,7 +367,7 @@ function updateCharacter() {
         </div>
     `;
         });
-        
+
         relationshipsHTML += `
                 </div>
             </div>
@@ -401,7 +380,7 @@ function updateCharacter() {
             </div>
         `;
     }
-    
+
     // Формируем список недавних событий (опционально)
     let recentEventsHTML = '';
     const recentEvents = gameState.character.recentEvents || [];
@@ -412,7 +391,7 @@ function updateCharacter() {
                 <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 1.1em;">📜 Недавние события:</h5>
                 <ul style="list-style: none; padding: 0; margin: 0;">
         `;
-        
+
         lastEvents.forEach(event => {
             recentEventsHTML += `
                 <li style="margin-bottom: 8px; padding-left: 20px; position: relative; color: #ccc; font-size: 0.9em; line-height: 1.4;">
@@ -421,13 +400,13 @@ function updateCharacter() {
                 </li>
             `;
         });
-        
+
         recentEventsHTML += `
                 </ul>
             </div>
         `;
     }
-    
+
     characterInfo.innerHTML = `
         <div style="padding: 10px;">
             <h4 style="color: #ffd700; margin-bottom: 10px;">${gameState.name}</h4>
@@ -445,7 +424,7 @@ function updateCharacter() {
 function updateSkills() {
     const skillsList = document.getElementById('skillsList');
     if (!skillsList || !gameState) return;
-    
+
     // Словарь перевода названий навыков на русский
     const skillNames = {
         'combat': '⚔️ Бой',
@@ -453,24 +432,24 @@ function updateSkills() {
         'speech': '💬 Красноречие',
         'survival': '🏕️ Выживание'
     };
-    
+
     skillsList.innerHTML = '';
-    
+
     Object.entries(gameState.skills).forEach(([skillName, skillData]) => {
         const skillDiv = document.createElement('div');
         skillDiv.className = 'skill-item';
         const displayName = skillNames[skillName] || skillName;
-        
+
         // Вычисляем прогресс до следующего уровня
         const currentXP = skillData.xp || 0;
         const nextLevelXP = skillData.nextLevel || 100;
         const progressPercent = Math.min(100, Math.round((currentXP / nextLevelXP) * 100));
-        
+
         // Создаем визуальную шкалу прогресса (10 делений)
         const filledBlocks = Math.floor(progressPercent / 10);
         const emptyBlocks = 10 - filledBlocks;
         const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
-        
+
         skillDiv.innerHTML = `
             <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
                 <span style="font-weight: 500;">${displayName}</span>
@@ -491,14 +470,14 @@ function updateSkills() {
 function updateInventory() {
     const inventoryList = document.getElementById('inventoryList');
     if (!inventoryList || !gameState) return;
-    
+
     inventoryList.innerHTML = '';
-    
+
     if (gameState.inventory.length === 0) {
         inventoryList.innerHTML = '<p class="empty-text">Инвентарь пуст</p>';
         return;
     }
-    
+
     gameState.inventory.forEach(item => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'inventory-item';
@@ -513,16 +492,16 @@ function updateInventory() {
 function updateHistory() {
     const historyList = document.getElementById('historyList');
     if (!historyList || !gameState) return;
-    
+
     historyList.innerHTML = '';
-    
+
     if (!gameState.history || gameState.history.length === 0) {
         historyList.innerHTML = '<p class="empty-text">Начало приключения</p>';
         return;
     }
-    
+
     const recentHistory = gameState.history.slice(-20).reverse();
-    
+
     recentHistory.forEach(entry => {
         const historyDiv = document.createElement('div');
         historyDiv.className = 'history-item';
@@ -539,20 +518,20 @@ function initTabHandlers() {
     tabButtons.forEach(btn => {
         const newBtn = btn.cloneNode(true);
         btn.parentNode.replaceChild(newBtn, btn);
-        
+
         newBtn.addEventListener('click', () => {
             const tab = newBtn.dataset.tab;
-            
+
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
+
             newBtn.classList.add('active');
-            
+
             const tabContent = document.getElementById(tab + 'Tab');
             if (tabContent) {
                 tabContent.classList.add('active');
             }
-            
+
             if (gameState) {
                 if (tab === 'character') updateCharacter();
                 else if (tab === 'skills') updateSkills();
@@ -566,15 +545,15 @@ function initTabHandlers() {
 function initCustomChoiceHandlers() {
     const customChoiceBtn = document.getElementById('customChoiceBtn');
     const customChoiceInput = document.getElementById('customChoice');
-    
+
     if (!customChoiceBtn || !customChoiceInput) return;
-    
+
     const newBtn = customChoiceBtn.cloneNode(true);
     customChoiceBtn.parentNode.replaceChild(newBtn, customChoiceBtn);
-    
+
     const newInput = customChoiceInput.cloneNode(true);
     customChoiceInput.parentNode.replaceChild(newInput, customChoiceInput);
-    
+
     newBtn.addEventListener('click', () => {
         const custom = newInput.value.trim();
         if (custom) {
@@ -582,7 +561,7 @@ function initCustomChoiceHandlers() {
             newInput.value = '';
         }
     });
-    
+
     newInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             newBtn.click();
@@ -594,26 +573,26 @@ function initHistoryModal() {
     const historyBtn = document.getElementById('historyBtn');
     const historyModal = document.getElementById('historyModal');
     const closeHistoryModal = document.getElementById('closeHistoryModal');
-    
+
     if (!historyBtn || !historyModal) return;
-    
+
     const newHistoryBtn = historyBtn.cloneNode(true);
     historyBtn.parentNode.replaceChild(newHistoryBtn, historyBtn);
-    
+
     newHistoryBtn.addEventListener('click', () => {
         historyModal.classList.remove('hidden');
         updateHistory();
     });
-    
+
     if (closeHistoryModal) {
         const newCloseBtn = closeHistoryModal.cloneNode(true);
         closeHistoryModal.parentNode.replaceChild(newCloseBtn, closeHistoryModal);
-        
+
         newCloseBtn.addEventListener('click', () => {
             historyModal.classList.add('hidden');
         });
     }
-    
+
     historyModal.addEventListener('click', (e) => {
         if (e.target === historyModal) {
             historyModal.classList.add('hidden');
@@ -622,9 +601,8 @@ function initHistoryModal() {
 }
 
 function restoreGame(savedData) {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}`);
-    
+    ws = new WebSocket('ws://localhost:3000');
+
     ws.onopen = () => {
         console.log('✅ WebSocket подключен при восстановлении');
         window.pendingRestore = {
@@ -633,53 +611,53 @@ function restoreGame(savedData) {
             currentChoices: savedData.currentChoices || []
         };
     };
-    
+
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        
+
         if (data.type === 'connected') {
             currentSessionId = data.sessionId;
             console.log(`🔗 Подключено, SessionID: ${currentSessionId}`);
-            
+
             if (window.pendingRestore) {
                 gameState = window.pendingRestore.gameState;
                 currentScene = window.pendingRestore.currentScene;
                 currentChoices = window.pendingRestore.currentChoices;
-                
+
                 updateUI();
                 displayScene(currentScene, currentChoices);
-                
+
                 document.getElementById('startScreen').classList.add('hidden');
                 document.getElementById('gameScreen').classList.remove('hidden');
-                
+
                 setTimeout(() => {
                     initTabHandlers();
                     initCustomChoiceHandlers();
                     initHistoryModal();
                     initSaveLoadHandlers();
                 }, 100);
-                
+
                 // Отправляем загруженное состояние на сервер
-    ws.send(JSON.stringify({
-                    type: 'load', 
+                ws.send(JSON.stringify({
+                    type: 'load',
                     gameState: gameState,
                     currentScene: currentScene,
                     currentChoices: currentChoices
                 }));
                 delete window.pendingRestore;
-                
+
                 console.log('✅ Сохранение загружено успешно!');
             }
         } else {
             handleMessage(data);
         }
     };
-    
+
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         alert('Ошибка подключения к серверу!');
     };
-    
+
     ws.onclose = () => {
         console.log('Disconnected from server');
     };
@@ -687,14 +665,14 @@ function restoreGame(savedData) {
 
 function saveGameToLocalStorage() {
     if (!gameState) return;
-    
+
     const saveData = {
         gameState,
         currentScene,
         currentChoices,
         timestamp: Date.now()
     };
-    
+
     localStorage.setItem('kingdomSave', JSON.stringify(saveData));
 }
 
@@ -723,7 +701,7 @@ function downloadSave() {
         alert('Нет данных для сохранения!');
         return;
     }
-    
+
     const saveData = {
         gameState,
         currentScene,
@@ -731,17 +709,17 @@ function downloadSave() {
         timestamp: Date.now(),
         version: '1.0'
     };
-    
+
     const json = JSON.stringify(saveData, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
+
     // Создаём имя файла с датой и именем персонажа
     const date = new Date();
     const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
     const timeStr = date.toTimeString().slice(0, 5).replace(/:/g, '');
     const fileName = `kingdom_save_${gameState.name}_${dateStr}_${timeStr}.json`;
-    
+
     const a = document.createElement('a');
     a.href = url;
     a.download = fileName;
@@ -749,7 +727,7 @@ function downloadSave() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     console.log(`💾 Сохранение скачано: ${fileName}`);
     alert(`💾 Сохранение скачано: ${fileName}`);
 }
@@ -757,18 +735,18 @@ function downloadSave() {
 // Функция для загрузки сохранения из файла
 function loadSaveFromFile(file) {
     const reader = new FileReader();
-    
+
     reader.onload = (e) => {
         try {
             const saveData = JSON.parse(e.target.result);
-            
+
             if (!saveData.gameState) {
                 alert('❌ Файл сохранения повреждён или неверного формата!');
                 return;
             }
-            
+
             console.log('📂 Загружено сохранение из файла:', file.name);
-            
+
             // Подтверждение загрузки
             const confirmLoad = confirm(
                 `📂 Загрузить сохранение?\n\n` +
@@ -776,11 +754,11 @@ function loadSaveFromFile(file) {
                 `Дата сохранения: ${saveData.timestamp ? new Date(saveData.timestamp).toLocaleString('ru-RU') : 'неизвестно'}\n\n` +
                 `Текущий прогресс будет потерян!`
             );
-            
+
             if (confirmLoad) {
                 // Очищаем текущее сохранение
                 clearLocalStorageSave();
-                
+
                 // Восстанавливаем игру
                 restoreGame(saveData);
             }
@@ -789,11 +767,11 @@ function loadSaveFromFile(file) {
             alert('❌ Ошибка при чтении файла сохранения! Проверьте формат файла.');
         }
     };
-    
+
     reader.onerror = () => {
         alert('❌ Ошибка при чтении файла!');
     };
-    
+
     reader.readAsText(file);
 }
 
@@ -802,7 +780,7 @@ function initSaveLoadHandlers() {
     const saveBtn = document.getElementById('saveBtn');
     const loadBtn = document.getElementById('loadBtn');
     const fileInput = document.getElementById('fileInput');
-    
+
     if (saveBtn) {
         saveBtn.addEventListener('click', () => {
             if (!gameState) {
@@ -812,12 +790,12 @@ function initSaveLoadHandlers() {
             downloadSave();
         });
     }
-    
+
     if (loadBtn && fileInput) {
         loadBtn.addEventListener('click', () => {
             fileInput.click();
         });
-        
+
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
