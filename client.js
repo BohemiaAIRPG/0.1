@@ -683,9 +683,12 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
 
             if (isDialogue) {
                 choiceBtn.classList.add('dialogue-choice');
-                choiceBtn.innerHTML = `<span class="choice-icon">➤</span> ${choice}`;
+                const cleanChoice = choice.replace(/^\d+[\.|)]\s*/, '').trim();
+                choiceBtn.innerHTML = `<span class="choice-icon">➤</span> ${cleanChoice}`;
             } else {
-                choiceBtn.textContent = `${index + 1}. ${choice}`;
+                // Удаляем нумерацию от AI, если она есть (например "1. Пойти..." -> "Пойти...")
+                const cleanChoice = choice.replace(/^\d+[\.|)]\s*/, '').trim();
+                choiceBtn.textContent = `${index + 1}. ${cleanChoice}`;
             }
 
             choiceBtn.addEventListener('click', () => makeChoice(choice));
@@ -764,12 +767,49 @@ function updateCharacter() {
 
         relationshipKeys.forEach(name => {
             const relation = relationships[name];
+
+            // Handle both string and object formats
+            let statusText = '';
+            let roleText = '';
+            let dispositionColor = '#ccc';
+
+            if (typeof relation === 'object' && relation !== null) {
+                // Object format: {"status":"знакомый","role":"хозяин таверны","disposition":0}
+                const status = relation.status || 'знакомый';
+                const role = relation.role || '';
+                const disposition = relation.disposition || 0;
+
+                // Color based on disposition
+                if (disposition >= 50) {
+                    dispositionColor = '#4CAF50'; // Green
+                    statusText = `${status} (дружелюбен)`;
+                } else if (disposition >= 20) {
+                    dispositionColor = '#8BC34A'; // Light green
+                    statusText = `${status} (расположен)`;
+                } else if (disposition > -20) {
+                    dispositionColor = '#ccc'; // Neutral
+                    statusText = status;
+                } else if (disposition > -50) {
+                    dispositionColor = '#FF9800'; // Orange
+                    statusText = `${status} (недоволен)`;
+                } else {
+                    dispositionColor = '#f44336'; // Red
+                    statusText = `${status} (враждебен)`;
+                }
+
+                roleText = role;
+            } else {
+                // String format (old style)
+                statusText = String(relation);
+            }
+
             relationshipsHTML += `
                 <div style="background: rgba(74, 144, 226, 0.1); padding: 10px; border-radius: 5px; border-left: 3px solid #4a90e2;">
                     <strong style="color: #4a90e2;">${name}</strong>
-                    <p style="margin-top: 5px; color: #ccc; font-size: 0.9em; line-height: 1.4;">${relation}</p>
-        </div>
-    `;
+                    ${roleText ? `<span style="color: #888; font-size: 0.85em;"> — ${roleText}</span>` : ''}
+                    <p style="margin-top: 5px; color: ${dispositionColor}; font-size: 0.9em; line-height: 1.4;">${statusText}</p>
+                </div>
+            `;
         });
 
         relationshipsHTML += `

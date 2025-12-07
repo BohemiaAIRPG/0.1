@@ -162,7 +162,7 @@ function createGameState(name, gender = 'male') {
             weapon: { name: 'нет', condition: 0 },
             armor: { name: 'нет', condition: 0 }
         },
-        worldMap: [{ name: "Начало Пути", x: 0, y: 0, discovered: true }], // Dynamic Map
+        worldMap: [], // Dynamic Map - starts empty
         inventory: [], // Полностью пустой инвентарь
         skills: {
             combat: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
@@ -459,6 +459,12 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 - Дублирование NPC: Если персонаж есть в "ОТНОШЕНИЯ", используй ТО ЖЕ ИМЯ!
 - "осмотреть" → newItems:[{...}] // НЕТ! Не брал!
 - "выслушать" → coins:+50 // НЕТ! Не принял деньги!
+- coins: +N без явного действия игрока принять деньги → ЗАПРЕЩЕНО!
+
+⚠️ ГРОШИ (coins) ПРАВИЛА:
+- coins ДОЛЖНЫ быть 0, если игрок НЕ получил/отдал деньги явно!
+- "разговор" → coins: 0. "торговля принята" → coins: +/-N
+- БЕЗ случайных монет! Только если деньги РЕАЛЬНО перешли из рук в руки!
 - "съесть яблоко" → usedItems:[], health:0 // НЕТ! Нужно ["Яблоко"], health:+10
 - "убедить стражника" → skillXP:{} // НЕТ! Нужно {"speech":15}
 
@@ -477,8 +483,11 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 
 5. locationChange: новая локация или "".
 6. ДИАЛОГИ: isDialogue: true, speakerName.
-7. КАРТА: Если нашел новое место -> newLocation.
+7. КАРТА: Если нашел новое место (таверна, церковь, и т.д.) -> newLocation: {name: "Название", x: X, y: Y}.
+   ⚠️ ВАЖНО: При входе в НОВОЕ здание (таверна, кузница, и т.п.) - ОБЯЗАТЕЛЬНО добавь newLocation!
 8. NPC: Если встретил NPC или узнал где он -> npcLocation: {name: "Имя", location: "Название локации"}.
+9. ОТНОШЕНИЯ: При знакомстве с NPC добавь в characterUpdate.relationships: 
+   {"Имя": {"status": "знакомый", "role": "Кто он (хозяин таверны/кузнец/и т.п.)", "disposition": 0}}
 
 ═══ ФОРМАТ ОТВЕТА (ТОЛЬКО JSON) ═══
 {
@@ -500,6 +509,10 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
   "npcLocation": { "name": "Имя NPC", "location": "Точное название локации с карты" },
   "usedItems": [],
   "newItems": [],
+  "newEquipment": {
+    "weapon": { "name": "...", "condition": 100 }, // Опционально, если поменялось
+    "armor": { "name": "...", "condition": 100 }  // Опционально
+  },
   "choices": ["Вариант1", "Вариант2", "Вариант3"]
 }
 
@@ -911,6 +924,45 @@ function applyChanges(gameState, parsed) {
                 console.log(`  ✨ Новый предмет: ${item.name} x${item.quantity || 1}`);
             }
         });
+    }
+
+    // Обновляем Экипировку
+    if (parsed.newEquipment) {
+        if (parsed.newEquipment.weapon) {
+            console.log(`⚔️ Смена оружия: ${gameState.equipment.weapon.name} -> ${parsed.newEquipment.weapon.name}`);
+
+            // Если у нас было старое оружие (не "нет"), вернем его в инвентарь
+            if (gameState.equipment.weapon.name && gameState.equipment.weapon.name !== 'нет' && gameState.equipment.weapon.name !== 'кулаки') {
+                const oldWeapon = {
+                    name: gameState.equipment.weapon.name,
+                    type: 'weapon',
+                    description: 'Бывшее в употреблении оружие',
+                    quantity: 1
+                };
+                gameState.inventory.push(oldWeapon);
+                console.log(`  ↩️ Старое оружие возвращено в инвентарь: ${oldWeapon.name}`);
+            }
+
+            gameState.equipment.weapon = parsed.newEquipment.weapon;
+        }
+
+        if (parsed.newEquipment.armor) {
+            console.log(`🛡️ Смена брони: ${gameState.equipment.armor.name} -> ${parsed.newEquipment.armor.name}`);
+
+            // Если у нас была старая броня, вернем её в инвентарь
+            if (gameState.equipment.armor.name && gameState.equipment.armor.name !== 'нет' && gameState.equipment.armor.name !== 'тряпье') {
+                const oldArmor = {
+                    name: gameState.equipment.armor.name,
+                    type: 'armor',
+                    description: 'Поношенная одежда',
+                    quantity: 1
+                };
+                gameState.inventory.push(oldArmor);
+                console.log(`  ↩️ Старая броня возвращена в инвентарь: ${oldArmor.name}`);
+            }
+
+            gameState.equipment.armor = parsed.newEquipment.armor;
+        }
     }
 }
 
