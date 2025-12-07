@@ -1088,8 +1088,14 @@ function applyChanges(gameState, parsed) {
     }
 
     // Recover stats from AI response (Eating/Sleeping)
-    if (parsed.satiety) gameState.satiety = Math.min(100, (gameState.satiety || 0) + parsed.satiety);
-    if (parsed.energy) gameState.energy = Math.min(100, (gameState.energy || 0) + parsed.energy);
+    if (parsed.satiety) {
+        console.log(`🔍 [DEBUG] Satiety Update: Old=${gameState.satiety}, AI_Proposed=${parsed.satiety}, New=${Math.min(100, (gameState.satiety || 0) + parsed.satiety)}`);
+        gameState.satiety = Math.min(100, (gameState.satiety || 0) + parsed.satiety);
+    }
+    if (parsed.energy) {
+        console.log(`🔍 [DEBUG] Energy Update: Old=${gameState.energy}, AI_Proposed=${parsed.energy}, New=${Math.min(100, (gameState.energy || 0) + parsed.energy)}`);
+        gameState.energy = Math.min(100, (gameState.energy || 0) + parsed.energy);
+    }
 }
 
 wss.on('connection', (ws) => {
