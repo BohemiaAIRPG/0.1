@@ -155,7 +155,7 @@ function createGameState(name, gender = 'male') {
         maxHealth: 100,
         stamina: 100,
         maxStamina: 100,
-        coins: 25,
+        coins: 0,
         reputation: 25,
         morality: 50, // Нейтральная мораль
         equipment: {
