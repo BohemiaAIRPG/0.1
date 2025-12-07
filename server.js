@@ -621,7 +621,7 @@ function parseAIResponse(text) {
 
         // === STRICT NUMERIC VALIDATION ===
         // Ensure all numeric fields are actually numbers, default to 0 if not
-        const numericFields = ['health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange'];
+        const numericFields = ['health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange', 'satiety', 'energy'];
         numericFields.forEach(field => {
             if (typeof parsed[field] !== 'number' || isNaN(parsed[field])) {
                 if (parsed[field] !== undefined) {
@@ -634,13 +634,19 @@ function parseAIResponse(text) {
         // Clamp extreme values to prevent abuse
         if (parsed.coins > 100) {
             console.warn(`⚠️ Suspicious coins value: ${parsed.coins} → Clamping to 100`);
-            parsed[coins] = 100;
+            parsed.coins = 100;
         }
         if (parsed.coins < -100) parsed.coins = -100;
         if (parsed.health > 50) parsed.health = 50;
         if (parsed.health < -50) parsed.health = -50;
         if (parsed.reputation > 10) parsed.reputation = 10;
         if (parsed.reputation < -10) parsed.reputation = -10;
+
+        // Clamp Survival Stats (deltas should be reasonable)
+        if (parsed.satiety > 50) parsed.satiety = 50;
+        if (parsed.satiety < -100) parsed.satiety = -100;
+        if (parsed.energy > 50) parsed.energy = 50;
+        if (parsed.energy < -100) parsed.energy = -100;
 
         // Validate skillXP
         if (!parsed.skillXP || typeof parsed.skillXP !== 'object') {
