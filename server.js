@@ -156,8 +156,8 @@ function createGameState(name, gender = 'male') {
         stamina: 100,
         maxStamina: 100,
         coins: 0,
-        hunger: 0,     // 0 = сыт, 100 = голодает (отнимает здоровье)
-        fatigue: 0,    // 0 = отдохнувший, 100 = измотан (отнимает выносливость)
+        satiety: 100,  // 100 = сыт, 0 = голодает (теряет здоровье)
+        energy: 100,   // 100 = бодр, < 35 = устал (теряет выносливость)
         reputation: 25,
         morality: 50, // Нейтральная мораль
         equipment: {
@@ -481,7 +481,13 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 - убедить/торг/обман/просьба → skillXP:{"speech":15}
 - скрытность/кража → skillXP:{"stealth":15}
 - охота/рыбалка/травы → skillXP:{"survival":15}
-- отдых/сон → stamina:+30, health:+10
+- отдых/сон → stamina:+30, health:+10, energy:+50 (max 100)
+- еда → satiety:+30 (max 100)
+
+⚠️ ВЫЖИВАНИЕ (satiety/energy):
+- satiety (Сытость): 100=сыт, 0=голод (-здоровье). Еда дает +satiety.
+- energy (Бодрость): 100=бодр, <35=устал (-выносливость). Сон дает +energy.
+- timeChange АВТОМАТИЧЕСКИ снижает их! Не снижай вручную, только добавляй при еде/сне.
 
 ⚠️ ИНВЕНТАРЬ newItems:
 - КАЖДЫЙ предмет ОТДЕЛЬНО! НЕ "Штаны и рубаха", а [{name:"Штаны"}, {name:"Рубаха"}]
@@ -1023,6 +1029,38 @@ function applyChanges(gameState, parsed) {
             gameState.equipment.armor = parsed.newEquipment.armor;
         }
     }
+
+    // === SURVIVAL MECHANICS ===
+    // 1. Time Decay (Natural loss over time)
+    if (parsed.timeChange && parsed.timeChange > 0) {
+        // Lose ~4 satiety per hour (25 hours to starve)
+        const satietyLoss = Math.ceil(parsed.timeChange * 4);
+        gameState.satiety = Math.max(0, (gameState.satiety || 100) - satietyLoss);
+
+        // Lose ~3 energy per hour (33 hours to exhaustion)
+        const energyLoss = Math.ceil(parsed.timeChange * 3);
+        gameState.energy = Math.max(0, (gameState.energy || 100) - energyLoss);
+
+        console.log(`📉 Survival Decay (-${parsed.timeChange}h): Satiety -${satietyLoss} (${gameState.satiety}), Energy -${energyLoss} (${gameState.energy})`);
+    }
+
+    // 2. Apply Penalties
+    // Satiety penalties
+    if (gameState.satiety <= 0) {
+        gameState.health = Math.max(0, gameState.health - 5);
+        console.warn('⚠️ STARVATION DAMAGE: Health -5');
+    }
+
+    // Energy penalties
+    if (gameState.energy < 35) {
+        // Limit max stamina or reduce current stamina
+        gameState.stamina = Math.min(gameState.stamina, 50); // Hard cap at 50% stamina if tired
+        console.warn('⚠️ EXHAUSTION PENALTY: Stamina capped at 50');
+    }
+
+    // Recover stats from AI response (Eating/Sleeping)
+    if (parsed.satiety) gameState.satiety = Math.min(100, (gameState.satiety || 0) + parsed.satiety);
+    if (parsed.energy) gameState.energy = Math.min(100, (gameState.energy || 0) + parsed.energy);
 }
 
 wss.on('connection', (ws) => {

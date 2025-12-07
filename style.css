@@ -234,12 +234,12 @@ body {
     background: linear-gradient(90deg, #ffd700 0%, #ffff80 100%);
 }
 
-.progress-fill.hunger {
-    background: linear-gradient(90deg, #ff9800 0%, #ffc107 100%);
+.progress-fill.satiety {
+    background: linear-gradient(90deg, #4caf50 0%, #8bc34a 100%);
 }
 
-.progress-fill.fatigue {
-    background: linear-gradient(90deg, #9c27b0 0%, #e040fb 100%);
+.progress-fill.energy {
+    background: linear-gradient(90deg, #2196f3 0%, #03a9f4 100%);
 }
 
 .stat span:last-child {

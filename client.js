@@ -758,22 +758,36 @@ function updateUI() {
     document.getElementById('staminaBar').style.width = staminaPercent + '%';
     document.getElementById('staminaText').textContent = `${gameState.stamina}/${gameState.maxStamina}`;
 
-    // Hunger
-    const hunger = gameState.hunger || 0;
-    const hungerBar = document.getElementById('hungerBar');
-    const hungerText = document.getElementById('hungerText');
-    if (hungerBar && hungerText) {
-        hungerBar.style.width = hunger + '%';
-        hungerText.textContent = `${hunger}/100`;
+    // Satiety
+    const satiety = gameState.satiety !== undefined ? gameState.satiety : 100;
+    const satietyBar = safeGetElement('satietyBar');
+    const satietyText = safeGetElement('satietyText');
+    if (satietyBar && satietyText) {
+        satietyBar.style.width = satiety + '%';
+        satietyText.textContent = `${satiety}/100`;
+
+        // Change color based on satiety level
+        if (satiety < 20) {
+            satietyBar.style.background = 'linear-gradient(90deg, #f44336 0%, #ff5722 100%)'; // Red warning
+        } else {
+            satietyBar.style.background = ''; // Default CSS
+        }
     }
 
-    // Fatigue
-    const fatigue = gameState.fatigue || 0;
-    const fatigueBar = document.getElementById('fatigueBar');
-    const fatigueText = document.getElementById('fatigueText');
-    if (fatigueBar && fatigueText) {
-        fatigueBar.style.width = fatigue + '%';
-        fatigueText.textContent = `${fatigue}/100`;
+    // Energy
+    const energy = gameState.energy !== undefined ? gameState.energy : 100;
+    const energyBar = safeGetElement('energyBar');
+    const energyText = safeGetElement('energyText');
+    if (energyBar && energyText) {
+        energyBar.style.width = energy + '%';
+        energyText.textContent = `${energy}/100`;
+
+        // Change color based on energy level
+        if (energy < 35) {
+            energyBar.style.background = 'linear-gradient(90deg, #ff9800 0%, #ffc107 100%)'; // Orange warning
+        } else {
+            energyBar.style.background = ''; // Default CSS
+        }
     }
 
     document.getElementById('coins').textContent = gameState.coins;
