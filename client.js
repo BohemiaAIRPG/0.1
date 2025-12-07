@@ -66,8 +66,114 @@ function startGame() {
         initTabHandlers();
         initCustomChoiceHandlers();
         initHistoryModal();
+        initMapHandlers(); // Map Handler
         initSaveLoadHandlers();
     }, 100);
+}
+
+// Map System
+let mapScale = 1.0;
+let mapOffsetX = 0;
+let mapOffsetY = 0;
+let isDraggingMap = false;
+let startDragX, startDragY;
+
+function initMapHandlers() {
+    const mapBtn = document.getElementById('mapBtn');
+    const mapModal = document.getElementById('mapModal');
+    const closeMapModal = document.getElementById('closeMapModal');
+    const canvas = document.getElementById('worldMapCanvas');
+
+    if (!mapBtn || !mapModal || !canvas) return;
+
+    mapBtn.addEventListener('click', () => {
+        mapModal.classList.remove('hidden');
+        drawMap();
+    });
+
+    closeMapModal.addEventListener('click', () => {
+        mapModal.classList.add('hidden');
+    });
+
+    // Zoom
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomIntensity = 0.1;
+        mapScale += e.deltaY * -zoomIntensity * 0.01;
+        mapScale = Math.min(Math.max(.5, mapScale), 5); // Limit zoom
+        drawMap();
+    });
+
+    // Drag
+    canvas.addEventListener('mousedown', (e) => {
+        isDraggingMap = true;
+        startDragX = e.clientX - mapOffsetX;
+        startDragY = e.clientY - mapOffsetY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isDraggingMap) {
+            mapOffsetX = e.clientX - startDragX;
+            mapOffsetY = e.clientY - startDragY;
+            drawMap();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDraggingMap = false;
+    });
+}
+
+function drawMap() {
+    const canvas = document.getElementById('worldMapCanvas');
+    if (!canvas || !gameState || !gameState.worldMap) return;
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+
+    const centerX = canvas.width / 2 + mapOffsetX;
+    const centerY = canvas.height / 2 + mapOffsetY;
+
+    // Clear
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Grid (Fog of War style)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    const gridSize = 50 * mapScale;
+
+    // Draw locations
+    gameState.worldMap.forEach(loc => {
+        const x = centerX + (loc.x * 20 * mapScale); // 1 coordinate unit = 20px
+        const y = centerY + (loc.y * 20 * mapScale); // Y goes down in Canvas
+
+        // Draw Dot
+        ctx.beginPath();
+        ctx.arc(x, y, 5 * mapScale, 0, Math.PI * 2);
+        ctx.fillStyle = loc.name === "Начало Пути" ? '#4a90e2' : '#ffd700'; // Start blue, others gold
+        ctx.fill();
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw Name
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `${12 * mapScale}px 'Segoe UI'`;
+        ctx.textAlign = 'center';
+        ctx.fillText(loc.name, x, y - 10 * mapScale);
+    });
+
+    // Draw Player Arrow
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY - 8 * mapScale);
+    ctx.lineTo(centerX - 6 * mapScale, centerY + 6 * mapScale);
+    ctx.lineTo(centerX + 6 * mapScale, centerY + 6 * mapScale);
+    ctx.fill();
+
+    // Update Coords UI
+    document.getElementById('mapCoordinates').textContent = `Zoom: ${mapScale.toFixed(1)}x`;
 }
 
 function handleMessage(data) {

@@ -162,6 +162,7 @@ function createGameState(name, gender = 'male') {
             weapon: { name: 'нет', condition: 0 },
             armor: { name: 'нет', condition: 0 }
         },
+        worldMap: [{ name: "Начало Пути", x: 0, y: 0, discovered: true }], // Dynamic Map
         inventory: [], // Полностью пустой инвентарь
         skills: {
             combat: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
@@ -401,6 +402,15 @@ ${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})
 
 
 
+
+═══ КАРТА И ЛОКАЦИИ (FOG OF WAR) ═══
+Известные места:
+${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`).join('\n')}
+
+ВАЖНО: Если игрок открывает НОВУЮ значимую локацию (город, деревня, лагерь, пещера), добавь "newLocation".
+Координаты относительные: 0,0 - старт. Смести на 5-15 единиц в логичную сторону.
+Пример: Игрок пошел на север -> X:0, Y:10. На восток -> X:10, Y:0.
+
 ═══ ЭКОНОМИКА (ГРОШИ) ═══
 Валюта: Пражские гроши (Groschen). 1 грош — это основная монета.
 ЦЕНЫ (ОРИЕНТИР):
@@ -450,7 +460,7 @@ ${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})
 
 5. locationChange: новая локация или "".
 6. ДИАЛОГИ: isDialogue: true, speakerName.
-7. ВЫБОРЫ: 3 варианта на русском.
+7. КАРТА: Если нашел новое место -> newLocation: {name: "...", x: N, y: N, description: "..."}.
 
 ═══ ФОРМАТ ОТВЕТА (ТОЛЬКО JSON) ═══
 {
@@ -469,6 +479,7 @@ ${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})
   "equipment": {weapon: {name: "", condition: 0}, armor: {name: "", condition: 0}},
   "characterUpdate": {recentEvents: [], importantChoices: [], relationships: {}, milestone: ""},
   "questsUpdate": [{name: "Quest Name", status: "active/completed/failed", description: "Updated info"}],
+  "newLocation": { "name": "Название", "x": 10, "y": 5, "description": "Кратко" },
   "usedItems": [],
   "newItems": [],
   "choices": ["Вариант1", "Вариант2", "Вариант3"]
@@ -812,7 +823,7 @@ function applyChanges(gameState, parsed) {
         }
     }
 
-    // Обновляем квесты (новая логика)
+    // Обновляем квесты
     if (parsed.questsUpdate) {
         if (!gameState.quests) gameState.quests = [];
         parsed.questsUpdate.forEach(q => {
@@ -828,24 +839,37 @@ function applyChanges(gameState, parsed) {
         });
     }
 
-    // Обновляем инвентарь
+    // Обновляем Карту (Fog of War)
+    if (parsed.newLocation && parsed.newLocation.name) {
+        if (!gameState.worldMap) gameState.worldMap = [];
+        const exists = gameState.worldMap.find(loc => loc.name === parsed.newLocation.name);
+        if (!exists) {
+            gameState.worldMap.push({
+                name: parsed.newLocation.name,
+                x: parsed.newLocation.x || 0,
+                y: parsed.newLocation.y || 0,
+                description: parsed.newLocation.description,
+                discovered: true
+            });
+            console.log(`🗺️ Новая локация открыта: "${parsed.newLocation.name}"`);
+        }
+    }
+
+    // Обновляем инвентарь (Использованные предметы)
     if (Array.isArray(parsed.usedItems) && parsed.usedItems.length > 0) {
         console.log(`📦 AI указал использованные предметы:`, parsed.usedItems);
         parsed.usedItems.forEach(itemName => {
             const index = gameState.inventory.findIndex(i => i.name === itemName);
             if (index !== -1) {
                 gameState.inventory[index].quantity--;
-                console.log(`  ➖ Убрано: ${itemName} (осталось: ${gameState.inventory[index].quantity})`);
                 if (gameState.inventory[index].quantity <= 0) {
                     gameState.inventory.splice(index, 1);
-                    console.log(`  🗑️ Предмет "${itemName}" полностью убран из инвентаря`);
                 }
-            } else {
-                console.warn(`  ⚠️ Предмет "${itemName}" не найден в инвентаре!`);
+                console.log(`  ➖ Использовано: ${itemName}`);
             }
         });
     } else {
-        console.log(`📦 AI не указал использованные предметы (usedItems пустой)`);
+        console.log(`📦 usedItems пустой`);
     }
 
     if (Array.isArray(parsed.newItems) && parsed.newItems.length > 0) {
