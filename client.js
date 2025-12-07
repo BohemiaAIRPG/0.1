@@ -842,11 +842,15 @@ function updateSkills() {    // Навыки
             speech: '💬 Красноречие',
             survival: '🏕️ Выживание'
         };
+        const displayName = skillNameMap[skillName] || skillName;
 
         const currentXP = skillData.xp || 0;
         const nextLevelXP = skillData.nextLevel || 100;
         const progressPercent = Math.min(100, Math.round((currentXP / nextLevelXP) * 100));
 
+        // Calculate progress bar blocks
+        const filledBlocks = Math.floor(progressPercent / 10);
+        const emptyBlocks = 10 - filledBlocks;
         const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
 
         skillDiv.innerHTML = `
