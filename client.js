@@ -569,73 +569,89 @@ function showWorldReacting() {
 }
 
 function displayScene(description, choices, isDialogue = false, speakerName = '') {
-    const sceneDescriptionDiv = document.getElementById('sceneDescription');
+    try {
+        console.log('🎬 Rendering scene:', { descriptionLength: description?.length, choicesCount: choices?.length });
 
-    // 1. Форматирование текста
-    // Разбиваем на абзацы
-    let paragraphs = description.split('\n\n').filter(p => p.trim());
-
-    // 2. Подсветка прямой речи (если это диалог или просто текст с речью)
-    // Регулярка для кириллических «...» и обычных "..."
-    if (isDialogue || description.includes('«') || description.includes('"')) {
-        paragraphs = paragraphs.map(p => {
-            // Подсветка: заменяем кавычки на span с классом
-            return p.replace(/«([^»]+)»/g, '<span class="dialogue-speech">«$1»</span>')
-                .replace(/"([^"]+)"/g, '<span class="dialogue-speech">"$1"</span>');
-        });
-    }
-
-    const formattedDescription = paragraphs.map(p => `<p class="scene-paragraph">${p.trim()}</p>`).join('');
-
-    // 3. Сборка HTML
-    let htmlContent = '';
-
-    // Если это диалог, добавляем красивый бейдж собеседника
-    if (isDialogue && speakerName) {
-        htmlContent += `
-            <div class="dialogue-header">
-                <div class="dialogue-badge">
-                    <span class="dialogue-icon">💬</span>
-                    <span class="dialogue-name">${speakerName}</span>
-                </div>
-                <div class="dialogue-line"></div>
-            </div>
-        `;
-    }
-
-    htmlContent += `<div class="scene-text">${formattedDescription}</div>`;
-    sceneDescriptionDiv.innerHTML = htmlContent;
-
-    // 4. Обновление стилей кнопок выбора
-    const choicesList = document.getElementById('choicesList');
-    const choicesHeader = document.querySelector('.choices-container h4');
-
-    if (isDialogue) {
-        choicesHeader.innerHTML = `💬 Ответ для <span style="color: #4a90e2">${speakerName}</span>:`;
-    } else {
-        choicesHeader.textContent = '🎮 Выберите действие:';
-    }
-
-    choicesList.innerHTML = '';
-
-    choices.forEach((choice, index) => {
-        const choiceBtn = document.createElement('button');
-        choiceBtn.className = 'choice-btn';
-
-        if (isDialogue) {
-            choiceBtn.classList.add('dialogue-choice');
-            choiceBtn.innerHTML = `<span class="choice-icon">➤</span> ${choice}`;
-        } else {
-            choiceBtn.textContent = `${index + 1}. ${choice}`;
+        const sceneDescriptionDiv = document.getElementById('sceneDescription');
+        if (!sceneDescriptionDiv) {
+            console.error('❌ Element #sceneDescription not found!');
+            return;
         }
 
-        choiceBtn.addEventListener('click', () => makeChoice(choice));
+        // 1. Форматирование текста
+        // Разбиваем на абзацы
+        let paragraphs = (description || '').split('\n\n').filter(p => p.trim());
 
-        choicesList.appendChild(choiceBtn);
-    });
+        // 2. Подсветка прямой речи (если это диалог или просто текст с речью)
+        // Регулярка для кириллических «...» и обычных "..."
+        if (isDialogue || (description && (description.includes('«') || description.includes('"')))) {
+            paragraphs = paragraphs.map(p => {
+                // Подсветка: заменяем кавычки на span с классом
+                return p.replace(/«([^»]+)»/g, '<span class="dialogue-speech">«$1»</span>')
+                    .replace(/"([^"]+)"/g, '<span class="dialogue-speech">"$1"</span>');
+            });
+        }
 
-    // Auto-scroll to top
-    document.querySelector('.game-main').scrollTop = 0;
+        const formattedDescription = paragraphs.map(p => `<p class="scene-paragraph">${p.trim()}</p>`).join('');
+
+        // 3. Сборка HTML
+        let htmlContent = '';
+
+        // Если это диалог, добавляем красивый бейдж собеседника
+        if (isDialogue && speakerName) {
+            htmlContent += `
+                <div class="dialogue-header">
+                    <div class="dialogue-badge">
+                        <span class="dialogue-icon">💬</span>
+                        <span class="dialogue-name">${speakerName}</span>
+                    </div>
+                    <div class="dialogue-line"></div>
+                </div>
+            `;
+        }
+
+        htmlContent += `<div class="scene-text">${formattedDescription}</div>`;
+        sceneDescriptionDiv.innerHTML = htmlContent;
+
+
+        // 4. Обновление стилей кнопок выбора
+        const choicesList = document.getElementById('choicesList');
+        const choicesHeader = document.querySelector('.choices-container h4');
+
+        if (isDialogue) {
+            choicesHeader.innerHTML = `💬 Ответ для <span style="color: #4a90e2">${speakerName}</span>:`;
+        } else {
+            choicesHeader.textContent = '🎮 Выберите действие:';
+        }
+
+        choicesList.innerHTML = '';
+
+        choices.forEach((choice, index) => {
+            const choiceBtn = document.createElement('button');
+            choiceBtn.className = 'choice-btn';
+
+            if (isDialogue) {
+                choiceBtn.classList.add('dialogue-choice');
+                choiceBtn.innerHTML = `<span class="choice-icon">➤</span> ${choice}`;
+            } else {
+                choiceBtn.textContent = `${index + 1}. ${choice}`;
+            }
+
+            choiceBtn.addEventListener('click', () => makeChoice(choice));
+
+            choicesList.appendChild(choiceBtn);
+        });
+
+        // Auto-scroll to top
+        document.querySelector('.game-main').scrollTop = 0;
+    } catch (e) {
+        console.error('❌ Error in displayScene:', e);
+        // Show error in UI as fallback
+        const sceneDescriptionDiv = document.getElementById('sceneDescription');
+        if (sceneDescriptionDiv) {
+            sceneDescriptionDiv.innerHTML = `<p style="color:red">Ошибка отображения: ${e.message}</p>`;
+        }
+    }
 }
 
 function updateUI() {
