@@ -481,6 +481,10 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 - охота/рыбалка/травы → skillXP:{"survival":15}
 - отдых/сон → stamina:+30, health:+10
 
+⚠️ ИНВЕНТАРЬ newItems:
+- КАЖДЫЙ предмет ОТДЕЛЬНО! НЕ "Штаны и рубаха", а [{name:"Штаны"}, {name:"Рубаха"}]
+- НЕ дублируй предметы, которые уже есть в инвентаре!
+
 5. locationChange: новая локация или "".
 6. ДИАЛОГИ: isDialogue: true, speakerName.
 7. КАРТА: Если нашел новое место (таверна, церковь, и т.д.) -> newLocation: {name: "Название", x: X, y: Y}.
@@ -947,14 +951,34 @@ function applyChanges(gameState, parsed) {
     if (Array.isArray(parsed.newItems) && parsed.newItems.length > 0) {
         console.log(`📦 AI добавил новые предметы:`, parsed.newItems);
         parsed.newItems.forEach(item => {
-            const normalizedName = item.name.trim(); // Fix: убираем пробелы (Arrow vs Arrow )
-            const existing = gameState.inventory.find(i => i.name === normalizedName);
+            const normalizedName = item.name.trim();
+
+            // Skip combined items (e.g. "Штаны и рубаха") - AI should add them separately
+            if (normalizedName.includes(' и ') || normalizedName.includes(' & ')) {
+                console.warn(`⚠️ Пропущен комбинированный предмет: "${normalizedName}" - добавляйте предметы отдельно!`);
+                return;
+            }
+
+            // Skip if name is too short or empty
+            if (normalizedName.length < 2) {
+                console.warn(`⚠️ Пропущен предмет с коротким именем: "${normalizedName}"`);
+                return;
+            }
+
+            const existing = gameState.inventory.find(i =>
+                i.name.toLowerCase() === normalizedName.toLowerCase() // Case-insensitive match
+            );
+
             if (existing) {
                 existing.quantity += item.quantity || 1;
                 console.log(`  ➕ Добавлено: ${item.name} x${item.quantity || 1} (всего: ${existing.quantity})`);
             } else {
-                gameState.inventory.push({ ...item, quantity: item.quantity || 1 });
-                console.log(`  ✨ Новый предмет: ${item.name} x${item.quantity || 1}`);
+                gameState.inventory.push({
+                    ...item,
+                    name: normalizedName, // Use normalized name
+                    quantity: item.quantity || 1
+                });
+                console.log(`  ✨ Новый предмет: ${normalizedName} x${item.quantity || 1}`);
             }
         });
     }

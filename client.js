@@ -791,7 +791,16 @@ function updateCharacter() {
         `;
 
         relationshipKeys.forEach(name => {
-            const relation = relationships[name];
+            let relation = relationships[name];
+
+            // Parse if it's a JSON string
+            if (typeof relation === 'string' && relation.startsWith('{')) {
+                try {
+                    relation = JSON.parse(relation);
+                } catch (e) {
+                    // Keep as string if parsing fails
+                }
+            }
 
             // Handle both string and object formats
             let statusText = '';
