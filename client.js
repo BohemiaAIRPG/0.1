@@ -67,6 +67,7 @@ function startGame() {
         initCustomChoiceHandlers();
         initHistoryModal();
         initMapHandlers(); // Map Handler
+        initInventoryHandlers(); // Inventory Handler
         initSaveLoadHandlers();
     }, 100);
 }
@@ -757,33 +758,67 @@ function updateCharacter() {
         `;
 }
 
-function updateSkills() {
+function updateSkills() {    // Навыки
     const skillsList = document.getElementById('skillsList');
     if (!skillsList || !gameState) return;
-
-    // Словарь перевода названий навыков на русский
-    const skillNames = {
-        'combat': '⚔️ Бой',
-        'stealth': '🗡️ Скрытность',
-        'speech': '💬 Красноречие',
-        'survival': '🏕️ Выживание'
-    };
-
     skillsList.innerHTML = '';
+
+    // 1. Атрибуты (Attributes)
+    if (gameState.attributes) {
+        const attrHeader = document.createElement('h3');
+        attrHeader.textContent = 'Характеристики';
+        attrHeader.style.color = '#ffd700';
+        attrHeader.style.marginTop = '0';
+        skillsList.appendChild(attrHeader);
+
+        const attrGrid = document.createElement('div');
+        attrGrid.style.display = 'grid';
+        attrGrid.style.gridTemplateColumns = '1fr 1fr';
+        attrGrid.style.gap = '10px';
+        attrGrid.style.marginBottom = '20px';
+
+        const attrs = [
+            { key: 'strength', label: '💪 Сила', desc: 'Физическая мощь' },
+            { key: 'agility', label: '🦵 Ловкость', desc: 'Координация' },
+            { key: 'intelligence', label: '🧠 Интеллект', desc: 'Знания' },
+            { key: 'charisma', label: '🗣️ Харизма', desc: 'Влияние' }
+        ];
+
+        attrs.forEach(attr => {
+            const val = gameState.attributes[attr.key] || 3;
+            const div = document.createElement('div');
+            div.className = 'skill-item';
+            div.innerHTML = `
+                <div class="skill-name" style="color: #fff;">${attr.label}</div>
+                <div class="skill-value" style="font-size: 1.2em; color: #4a90e2;">${val}</div>
+                <div style="font-size: 0.8em; color: #888;">${attr.desc}</div>
+            `;
+            attrGrid.appendChild(div);
+        });
+        skillsList.appendChild(attrGrid);
+    }
+
+    // 2. Навыки (Skills)
+    const skillHeader = document.createElement('h3');
+    skillHeader.textContent = 'Навыки';
+    skillHeader.style.color = '#ffd700';
+    skillsList.appendChild(skillHeader);
 
     Object.entries(gameState.skills).forEach(([skillName, skillData]) => {
         const skillDiv = document.createElement('div');
         skillDiv.className = 'skill-item';
-        const displayName = skillNames[skillName] || skillName;
 
-        // Вычисляем прогресс до следующего уровня
+        const skillNameMap = {
+            combat: '⚔️ Бой',
+            stealth: '🥷 Скрытность',
+            speech: '💬 Красноречие',
+            survival: '🏕️ Выживание'
+        };
+
         const currentXP = skillData.xp || 0;
         const nextLevelXP = skillData.nextLevel || 100;
         const progressPercent = Math.min(100, Math.round((currentXP / nextLevelXP) * 100));
 
-        // Создаем визуальную шкалу прогресса (10 делений)
-        const filledBlocks = Math.floor(progressPercent / 10);
-        const emptyBlocks = 10 - filledBlocks;
         const progressBar = '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
 
         skillDiv.innerHTML = `
@@ -803,28 +838,150 @@ function updateSkills() {
     });
 }
 
-function updateInventory() {
-    const inventoryList = document.getElementById('inventoryList');
-    if (!inventoryList || !gameState) return;
+// --- Inventory System ---
+let selectedSlotIndex = -1;
+let currentFilter = 'all';
 
-    inventoryList.innerHTML = '';
+function initInventoryHandlers() {
+    // Filter Buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentFilter = e.target.dataset.filter;
+            selectedSlotIndex = -1; // Deselect
+            updateInventory();
+            document.getElementById('itemDetailsPanel').classList.add('hidden');
+        });
+    });
 
-    if (gameState.inventory.length === 0) {
-        inventoryList.innerHTML = '<p class="empty-text">Инвентарь пуст</p>';
-        return;
-    }
+    // Action Buttons
+    const useBtn = document.getElementById('useItemBtn');
+    const dropBtn = document.getElementById('dropItemBtn');
 
-    gameState.inventory.forEach(item => {
-        const itemDiv = document.createElement('div');
-        itemDiv.className = 'inventory-item';
-        itemDiv.innerHTML = `
-            <span>${item.name}</span>
-            <span>x${item.quantity}</span>
-        `;
-        inventoryList.appendChild(itemDiv);
+    if (useBtn) useBtn.addEventListener('click', () => {
+        if (selectedSlotIndex === -1) return;
+        const item = getFilteredInventory()[selectedSlotIndex];
+        if (item) makeChoice(`Использовать ${item.name}`);
+    });
+
+    if (dropBtn) dropBtn.addEventListener('click', () => {
+        if (selectedSlotIndex === -1) return;
+        const item = getFilteredInventory()[selectedSlotIndex];
+        if (item) makeChoice(`Выбросить ${item.name}`);
     });
 }
 
+function getItemIcon(name) {
+    const lower = name.toLowerCase();
+    // Weapons
+    if (lower.includes('меч')) return '⚔️';
+    if (lower.includes('лук')) return '🏹';
+    if (lower.includes('топор')) return '🪓';
+    if (lower.includes('дубин')) return '🪵';
+    if (lower.includes('нож') || lower.includes('кинжал')) return '🗡️';
+
+    // Armor
+    if (lower.includes('доспех') || lower.includes('кольчуг')) return '🛡️';
+    if (lower.includes('шлем')) return '🪖';
+    if (lower.includes('сапог')) return '👢';
+    if (lower.includes('перчат')) return '🧤';
+    if (lower.includes('плащ') || lower.includes('обмотки') || lower.includes('тряпк')) return '🧥';
+
+    // Food
+    if (lower.includes('хлеб')) return '🍞';
+    if (lower.includes('яблок')) return '🍎';
+    if (lower.includes('мясо')) return '🥩';
+    if (lower.includes('сыр')) return '🧀';
+    if (lower.includes('пиво') || lower.includes('эль')) return '🍺';
+    if (lower.includes('вино')) return '🍷';
+    if (lower.includes('вода')) return '💧';
+
+    // Misc
+    if (lower.includes('зелье') || lower.includes('отвар')) return '🧪';
+    if (lower.includes('ключ')) return '🔑';
+    if (lower.includes('монет') || lower.includes('деньги')) return '💰';
+    if (lower.includes('книг') || lower.includes('письм')) return '📜';
+    if (lower.includes('факел')) return '🔥';
+    if (lower.includes('трава') || lower.includes('цветок')) return '🌿';
+
+    return '📦';
+}
+
+function getItemType(name) {
+    const icon = getItemIcon(name);
+    if (['⚔️', '🏹', '🪓', '🪵', '🗡️'].includes(icon)) return 'weapon';
+    if (['🛡️', '🪖', '👢', '🧤', '🧥'].includes(icon)) return 'armor';
+    if (['🍞', '🍎', '🥩', '🧀', '🍺', '🍷', '💧'].includes(icon)) return 'food';
+    return 'misc';
+}
+
+function getFilteredInventory() {
+    if (!gameState || !gameState.inventory) return [];
+    return gameState.inventory.filter(item => {
+        if (currentFilter === 'all') return true;
+        const type = getItemType(item.name);
+        return type === currentFilter;
+    });
+}
+
+function updateInventory() {
+    const grid = document.getElementById('inventoryGrid');
+    if (!grid || !gameState) return;
+
+    grid.innerHTML = '';
+    const filteredItems = getFilteredInventory();
+
+    // Render Items
+    filteredItems.forEach((item, index) => {
+        const slot = document.createElement('div');
+        slot.className = 'inventory-slot';
+        if (index === selectedSlotIndex) slot.classList.add('selected');
+
+        slot.innerHTML = `
+            <div class="item-icon">${getItemIcon(item.name)}</div>
+            ${item.quantity > 1 ? `<div class="item-count">${item.quantity}</div>` : ''}
+        `;
+
+        slot.addEventListener('click', () => {
+            // Select logic
+            document.querySelectorAll('.inventory-slot').forEach(s => s.classList.remove('selected'));
+            slot.classList.add('selected');
+            selectedSlotIndex = index;
+            showItemDetails(item);
+        });
+
+        grid.appendChild(slot);
+    });
+
+    // Fill remaining slots with empty ones (min 20 slots total look)
+    const totalSlots = Math.max(20, filteredItems.length + 5);
+    for (let i = filteredItems.length; i < totalSlots; i++) {
+        const emptySlot = document.createElement('div');
+        emptySlot.className = 'inventory-slot empty';
+        grid.appendChild(emptySlot);
+    }
+}
+
+function showItemDetails(item) {
+    const panel = document.getElementById('itemDetailsPanel');
+    const icon = document.getElementById('detailIcon');
+    const name = document.getElementById('detailName');
+    const type = document.getElementById('detailType');
+    const desc = document.getElementById('detailDesc');
+
+    if (!panel) return;
+
+    panel.classList.remove('hidden');
+    icon.textContent = getItemIcon(item.name);
+    name.textContent = item.name;
+
+    const typeMap = { 'weapon': 'Оружие', 'armor': 'Одежда/Броня', 'food': 'Еда/Напитки', 'misc': 'Предмет' };
+    type.textContent = typeMap[getItemType(item.name)];
+
+    // Description can be generic if we don't have one stored
+    desc.textContent = item.description || "Обычный предмет, который можно найти в этом мире.";
+}
 function updateHistory() {
     const historyList = document.getElementById('historyList');
     if (!historyList || !gameState) return;

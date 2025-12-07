@@ -151,12 +151,12 @@ function createGameState(name, gender = 'male') {
             hour: 9, // 9 утра
             timeOfDay: 'утро' // утро, день, вечер, ночь
         },
-        health: 65, // Травмы от столкновения с конём
+        health: 100,
         maxHealth: 100,
-        stamina: 50, // Сильно истощен
+        stamina: 100,
         maxStamina: 100,
-        coins: 0, // Без денег
-        reputation: 25, // Никто не знает
+        coins: 25,
+        reputation: 25,
         morality: 50, // Нейтральная мораль
         equipment: {
             weapon: { name: 'нет', condition: 0 },
@@ -170,12 +170,25 @@ function createGameState(name, gender = 'male') {
             speech: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
             survival: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 }
         },
+        skills: {
+            combat: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
+            stealth: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
+            speech: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
+            survival: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 }
+        },
+        attributes: {
+            strength: 3,      // Сила: Вес, тяжелое оружие, проламывание дверей. (1-10)
+            agility: 3,       // Ловкость: Уклонение, скрытность, стрельба. (1-10)
+            intelligence: 3,  // Интеллект: Обучение, магия, расследование. (1-10)
+            charisma: 3       // Харизма: Убеждение, цены, лидерство. (1-10)
+        },
         character: {
             background: `${name} - ${genderText}, очнувш${genderPronoun === 'он' ? 'ийся' : 'аяся'} в грязи на улице Ратая. ${genderPronoun === 'он' ? 'Его' : 'Её'} сбил всадник на коне - ${genderPronoun === 'он' ? 'он' : 'она'} валяется избитым, без одежды и вещей. ${genderPronoun === 'он' ? 'Он' : 'Она'} ничего не помнит о себе. Есть только смутные обрывки чего-то странного - но что это? Местные жители не знают, кто это. Нужно выживать в этом средневековом мире.`,
             traits: ['растерянный', 'стойкий', 'адаптивный', 'наблюдательный'],
             recentEvents: [], // Последние события
             importantChoices: [], // Важные выборы
             relationships: {},
+            npcLocations: {}, // Map of "NPC Name" -> "Location Name"
             // Смутные обрывки "памяти" - реальны ли они?
             memories: [
                 'Обрывок чего-то: огромные железные коробки на колесах, несущиеся быстрее лошадей... Сон? Видение?',
@@ -435,9 +448,13 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 3. ТЮРЬМА: НЕ конец игры. gameOver: false.
 4. ОПИСАНИЕ: Макс 130 слов, 4-6 предложений. Атмосферно. Используй "вы/вас". ТОЛЬКО СРЕДНЕВЕКОВЬЕ (никаких машин/небоскрёбов, если это не сюжетный триггер).
 
+5. ⛔ ПРОВЕРКИ ХАРАКТЕРИСТИК (SKILL CHECKS):
+    - Игрок НЕ может делать то, что физически невозможно для его характеристик (см. раздел ХАРАКТЕРИСТИКИ).
+    - Если игрок с Силой 3 пытается поднять лошадь -> Опиши провал и потерю выносливости/здоровья.
+    - Если игрок с Харизмой 1 хамит страже -> Опиши наказание (тюрьма, штраф, драка).
+    - НЕ подыгрывай. Мир жесток. Помни: 3 - это обычный слабый крестьянин.
 
-
-❌ ТИПИЧНЫЕ ОШИБКИ (НЕ ДЕЛАЙ ТАК!):
+6. ⛔ ЗАПРЕТ НА "ДЕЖАВЮ" И "РЕЛЬСЫ":
 - БЕЗ ПОВТОРЯЮЩИХСЯ ВИДЕНИЙ: "Внезапно мелькает видение..." — ЗАПРЕЩЕНО! Описывай только реальный мир.
 - Дублирование NPC: Если персонаж есть в "ОТНОШЕНИЯ", используй ТО ЖЕ ИМЯ!
 - "осмотреть" → newItems:[{...}] // НЕТ! Не брал!
@@ -460,7 +477,8 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 
 5. locationChange: новая локация или "".
 6. ДИАЛОГИ: isDialogue: true, speakerName.
-7. КАРТА: Если нашел новое место -> newLocation: {name: "...", x: N, y: N, description: "..."}.
+7. КАРТА: Если нашел новое место -> newLocation.
+8. NPC: Если встретил NPC или узнал где он -> npcLocation: {name: "Имя", location: "Название локации"}.
 
 ═══ ФОРМАТ ОТВЕТА (ТОЛЬКО JSON) ═══
 {
@@ -476,10 +494,10 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
   "speakerName": "",
   "skillXP": {},
   "equipment": {weapon: {name: "", condition: 0}, armor: {name: "", condition: 0}},
-  "equipment": {weapon: {name: "", condition: 0}, armor: {name: "", condition: 0}},
   "characterUpdate": {recentEvents: [], importantChoices: [], relationships: {}, milestone: ""},
   "questsUpdate": [{name: "Quest Name", status: "active/completed/failed", description: "Updated info"}],
   "newLocation": { "name": "Название", "x": 10, "y": 5, "description": "Кратко" },
+  "npcLocation": { "name": "Имя NPC", "location": "Точное название локации с карты" },
   "usedItems": [],
   "newItems": [],
   "choices": ["Вариант1", "Вариант2", "Вариант3"]
@@ -853,6 +871,14 @@ function applyChanges(gameState, parsed) {
             });
             console.log(`🗺️ Новая локация открыта: "${parsed.newLocation.name}"`);
         }
+    }
+
+    // Обновляем Локации NPC
+    if (parsed.npcLocation && parsed.npcLocation.name && parsed.npcLocation.location) {
+        if (!gameState.character.npcLocations) gameState.character.npcLocations = {};
+
+        gameState.character.npcLocations[parsed.npcLocation.name] = parsed.npcLocation.location;
+        console.log(`👤 NPC ${parsed.npcLocation.name} замечен в локации "${parsed.npcLocation.location}"`);
     }
 
     // Обновляем инвентарь (Использованные предметы)

@@ -170,11 +170,13 @@ body {
 }
 
 /* Статистики */
-.stats, .equipment {
+.stats,
+.equipment {
     margin-bottom: 20px;
 }
 
-.stats h4, .equipment h4 {
+.stats h4,
+.equipment h4 {
     color: #ffffff;
     margin-bottom: 15px;
     font-size: 1.1em;
@@ -242,7 +244,7 @@ body {
     font-size: 1.5em;
 }
 
-.equip-item > div {
+.equip-item>div {
     flex: 1;
 }
 
@@ -326,27 +328,32 @@ body {
     background: rgba(255, 255, 255, 0.3);
 }
 
-#skillsList, #inventoryList, #emotionsList {
+#skillsList,
+#inventoryList,
+#emotionsList {
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.skill-item, .inventory-item {
+.skill-item,
+.inventory-item {
     padding: 10px;
     background: rgba(255, 255, 255, 0.02);
     border-radius: 8px;
     border-left: 3px solid #ffffff;
 }
 
-.skill-item h5, .inventory-item h5 {
+.skill-item h5,
+.inventory-item h5 {
     color: #ffffff;
     margin-bottom: 5px;
     font-size: 0.9em;
     font-weight: 300;
 }
 
-.skill-item p, .inventory-item p {
+.skill-item p,
+.inventory-item p {
     font-size: 0.85em;
     color: #808080;
 }
@@ -494,6 +501,176 @@ body {
     border-color: #ffffff;
 }
 
+/* Inventory Grid System */
+.inventory-filters {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+}
+
+.filter-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #aaa;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.filter-btn.active,
+.filter-btn:hover {
+    background: #4a90e2;
+    color: white;
+    border-color: #4a90e2;
+}
+
+.inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.inventory-slot {
+    aspect-ratio: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.inventory-slot:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.inventory-slot.selected {
+    border-color: #ffd700;
+    background: rgba(255, 215, 0, 0.1);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+}
+
+.inventory-slot.empty {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.inventory-slot.empty:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.item-icon {
+    font-size: 24px;
+}
+
+.item-count {
+    position: absolute;
+    bottom: 2px;
+    right: 4px;
+    font-size: 10px;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 1px 4px;
+    border-radius: 4px;
+    color: #fff;
+    font-weight: bold;
+}
+
+/* Item Details Panel */
+.item-details-panel {
+    margin-top: 15px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 15px;
+    animation: fadeIn 0.3s ease;
+}
+
+.item-header {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+
+.item-icon-large {
+    font-size: 40px;
+    background: rgba(0, 0, 0, 0.5);
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.item-info h4 {
+    color: #ffd700;
+    margin: 0 0 5px 0;
+    font-size: 1.1em;
+}
+
+.item-type {
+    color: #888;
+    font-size: 0.9em;
+    font-style: italic;
+}
+
+.item-desc {
+    color: #ccc;
+    font-size: 0.95em;
+    line-height: 1.5;
+    margin-bottom: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 10px;
+}
+
+.item-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.action-btn {
+    flex: 1;
+    padding: 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.use-btn {
+    background: #4a90e2;
+    color: white;
+}
+
+.use-btn:hover {
+    background: #357abd;
+}
+
+.drop-btn {
+    background: rgba(255, 0, 0, 0.2);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 0, 0, 0.3);
+}
+
+.drop-btn:hover {
+    background: rgba(255, 0, 0, 0.3);
+}
+
 /* Загрузка */
 .loading {
     text-align: center;
@@ -512,17 +689,25 @@ body {
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 /* Анимация мигания для "Мир реагирует..." */
 @keyframes slowBlink {
-    0%, 100% { 
+
+    0%,
+    100% {
         opacity: 1;
         text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
     }
-    50% { 
+
+    50% {
         opacity: 0.3;
         text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
     }
@@ -556,13 +741,15 @@ body {
     font-weight: 300;
 }
 
-.quests-list, .history-list {
+.quests-list,
+.history-list {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 
-.quest-item, .history-item {
+.quest-item,
+.history-item {
     padding: 12px;
     background: rgba(255, 255, 255, 0.02);
     border-radius: 8px;
@@ -607,7 +794,8 @@ body {
     gap: 10px;
 }
 
-.save-btn, .load-btn {
+.save-btn,
+.load-btn {
     flex: 1;
     padding: 10px;
     background: rgba(255, 255, 255, 0.05);
@@ -764,8 +952,9 @@ body {
     .game-screen {
         grid-template-columns: 1fr;
     }
-    
-    .stats-panel, .quest-panel {
+
+    .stats-panel,
+    .quest-panel {
         max-height: none;
     }
 }
@@ -785,6 +974,101 @@ body {
     padding: 40px;
     box-sizing: border-box;
     overflow-y: auto;
+
+    /* Game Over Styles */
+    .game-over-container {
+        animation: fadeIn 2s ease-in;
+        text-align: center;
+    }
+
+    .game-over-title {
+        font-size: 50px;
+        font-weight: 300;
+        letter-spacing: 10px;
+        color: #e74c3c;
+        margin-bottom: 40px;
+        text-shadow: 0 0 30px rgba(255, 0, 0, 0.3);
+    }
+
+    /* === CINEMATIC DIALOGUE STYLES === */
+    .scene-paragraph {
+        margin-bottom: 20px;
+        line-height: 1.8;
+        /* More readable spacing */
+        font-size: 1.05em;
+        color: #d0d0d0;
+    }
+
+    .dialogue-speech {
+        color: #ffd700;
+        /* Gold for speech */
+        font-weight: 500;
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+        font-family: 'Segoe UI', serif;
+        /* Slightly different font flair? Optional */
+    }
+
+    .dialogue-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 25px;
+        animation: slideInLeft 0.5s ease-out;
+    }
+
+    .dialogue-badge {
+        background: linear-gradient(135deg, #2c3e50 0%, #4a90e2 100%);
+        padding: 8px 20px;
+        border-radius: 20px 20px 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .dialogue-icon {
+        font-size: 1.2em;
+    }
+
+    .dialogue-name {
+        font-weight: 600;
+        color: #fff;
+        letter-spacing: 0.5px;
+        font-size: 1.1em;
+    }
+
+    .dialogue-line {
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, #4a90e2 0%, transparent 100%);
+        margin-left: 15px;
+        opacity: 0.5;
+    }
+
+    .dialogue-choice {
+        border-left: 3px solid #4a90e2 !important;
+        background: linear-gradient(90deg, rgba(74, 144, 226, 0.1) 0%, transparent 100%);
+    }
+
+    .choice-icon {
+        color: #4a90e2;
+        margin-right: 8px;
+        font-size: 1.1em;
+    }
+
+    @keyframes slideInLeft {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    animation: fadeIn 1s ease-in;
     z-index: 2000;
 }
 
@@ -883,15 +1167,23 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-20px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Адаптив для экрана смерти */
 @media (max-width: 768px) {
     .game-over-container {
         padding: 20px;
-        justify-content: flex-start; /* Чтобы можно было скроллить */
+        justify-content: flex-start;
+        /* Чтобы можно было скроллить */
     }
 
     .game-over-title {
@@ -930,23 +1222,3 @@ body {
         font-size: 1.2em;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
