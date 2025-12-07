@@ -5,15 +5,30 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #0a0a0a 100%);
-    color: #d0d0d0;
-    min-height: 100vh;
-    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', 'Roboto', sans-serif;
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    height: 100vh;
+    overflow: hidden;
+    /* Уменьшаем базовый шрифт для компактности на 100% масштабе */
+    font-size: 14px;
+}
+
+.game-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    max-width: 1400px;
+    /* Ограничиваем ширину для больших экранов */
+    margin: 0 auto;
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+    background: #141414;
 }
 
 .container {
-    max-width: 1600px;
+    max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
 }
@@ -715,6 +730,79 @@ body {
 
 .world-reacting {
     animation: slowBlink 2s ease-in-out infinite;
+}
+
+/* Main Game Layout */
+.game-interface {
+    display: flex;
+    gap: 15px;
+    height: calc(100vh - 40px);
+    /* Full height minus margins */
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+/* Left Panel: Stats */
+.stats-panel {
+    width: 280px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+/* Middle Panel: Scene */
+.game-main {
+    flex: 1;
+    /* Takes remaining space */
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.scene-description {
+    flex: 1;
+    overflow-y: auto;
+    padding: 25px;
+    font-size: 1.1em;
+    line-height: 1.6;
+}
+
+.choices-container {
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    max-height: 40%;
+    /* Limit height so text is always visible */
+    overflow-y: auto;
+}
+
+/* Right Panel: Inventory/Tabs */
+.tabs-panel {
+    width: 320px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
 }
 
 /* Правая панель */
