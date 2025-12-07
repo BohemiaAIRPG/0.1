@@ -390,13 +390,25 @@ function handleMessage(data) {
         currentSessionId = data.sessionId;
         console.log(`🔗 Подключено к серверу, SessionID: ${currentSessionId}`);
     } else if (data.type === 'scene') {
+        console.log('🎬 Received scene data:', {
+            hasGameState: !!data.gameState,
+            hasDescription: !!data.description,
+            descLength: data.description?.length,
+            choicesCount: data.choices?.length
+        });
+
         gameState = data.gameState;
         currentScene = data.description;
         currentChoices = data.choices;
 
+        console.log('📊 About to call updateUI and displayScene...');
         saveGameToLocalStorage();
         updateUI();
+        console.log('✅ updateUI completed');
+
         displayScene(currentScene, currentChoices, data.isDialogue, data.speakerName);
+        console.log('✅ displayScene completed');
+
         hideLoading();
     } else if (data.type === 'generating') {
         showLoading();
