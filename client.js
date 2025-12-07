@@ -161,17 +161,41 @@ function initMapHandlers() {
 
 function getMarkerIcon(name) {
     const lower = name.toLowerCase();
-    if (lower.includes('корчма') || lower.includes('таверна')) return '🍺';
+    // Entertainment / Social
+    if (lower.includes('корчма') || lower.includes('таверна') || lower.includes('трактир')) return '🍺';
+    if (lower.includes('бордель') || lower.includes('купальн')) return '🛁';
+
+    // Trade / Craft
     if (lower.includes('конюшня') || lower.includes('лошад')) return '🐎';
     if (lower.includes('рынок') || lower.includes('лавк') || lower.includes('торг')) return '💰';
     if (lower.includes('кузн')) return '⚒️';
-    if (lower.includes('лес') || lower.includes('чаща')) return '🌲';
+    if (lower.includes('оружей') || lower.includes('брон')) return '⚔️';
+    if (lower.includes('портн') || lower.includes('одежд')) return '🧵';
+    if (lower.includes('алхим') || lower.includes('зель')) return '⚗️';
+    if (lower.includes('мельниц')) return '🥖';
+
+    // Knowledge / Religion
+    if (lower.includes('церковь') || lower.includes('храм') || lower.includes('монастыр')) return '⛪';
+    if (lower.includes('библиотек') || lower.includes('книг') || lower.includes('писар')) return '📜';
+    if (lower.includes('ратуша') || lower.includes('суд')) return '⚖️';
+
+    // Nature / World
+    if (lower.includes('лес') || lower.includes('чаща') || lower.includes('роща')) return '🌲';
+    if (lower.includes('река') || lower.includes('озеро') || lower.includes('пруд')) return '💧';
+    if (lower.includes('пещер') || lower.includes('грот')) return '🦇';
+    if (lower.includes('лагерь') || lower.includes('костер')) return '⛺';
+    if (lower.includes('руин') || lower.includes('развалин')) return '🏛️';
+
+    // Buildings
     if (lower.includes('замок') || lower.includes('крепость')) return '🏰';
-    if (lower.includes('церковь') || lower.includes('храм')) return '⛪';
-    if (lower.includes('дом')) return '🏠';
-    if (lower.includes('пещер')) return '🦇';
-    if (lower.includes('лагерь')) return '⛺';
+    if (lower.includes('башня')) return '🗼';
+    if (lower.includes('дом') || lower.includes('хижина')) return '🏠';
+    if (lower.includes('тюрьм') || lower.includes('темниц')) return '⛓️';
+
+    // Special
     if (lower.includes('начало')) return '🔵';
+    if (lower.includes('кладбищ') || lower.includes('могил')) return '🪦';
+
     return '📍'; // Default
 }
 
@@ -251,6 +275,15 @@ function drawMap() {
     ctx.fill();
     ctx.stroke();
 
+    // Player Label "ВЫ"
+    ctx.fillStyle = '#ff4444';
+    ctx.font = `bold ${12 * mapScale}px "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur = 4;
+    ctx.fillText("ВЫ", playerX, playerY - 15 * mapScale);
+    ctx.shadowBlur = 0; // Reset shadow
+
     // Draw Tooltip if hovering
     if (hoveredLocation) {
         const loc = hoveredLocation;
@@ -265,13 +298,47 @@ function drawMap() {
         // Tooltip description? (Optional, just name for now to keep it clean)
         // const desc = loc.description || ""; 
 
-        const boxWidth = textWidth + padding * 2;
-        const boxHeight = fontSize + padding * 2;
+        let tooltipLines = [loc.name];
+
+        // Найдем NPC в этой локации
+        if (gameState.character && gameState.character.npcLocations) {
+            const locNameLower = loc.name.toLowerCase();
+            const npcsHere = Object.entries(gameState.character.npcLocations)
+                .filter(([name, npcLoc]) => npcLoc.toLowerCase().includes(locNameLower) || locNameLower.includes(npcLoc.toLowerCase()))
+                .map(([name]) => name);
+
+            if (npcsHere.length > 0) {
+                npcsHere.forEach(npcName => {
+                    tooltipLines.push(`👤 ${npcName}`);
+                    // Если есть отношения, покажем их
+                    if (gameState.character.relationships && gameState.character.relationships[npcName]) {
+                        const rel = gameState.character.relationships[npcName];
+                        // Обрезаем длинное описание отношений
+                        const shortRel = rel.length > 40 ? rel.substring(0, 40) + '...' : rel;
+                        tooltipLines.push(`   "${shortRel}"`);
+                    }
+                });
+            }
+        }
+
+        ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+
+        // Calculate dimensions
+        let maxWidth = 0;
+        tooltipLines.forEach(line => {
+            const w = ctx.measureText(line).width;
+            if (w > maxWidth) maxWidth = w;
+        });
+
+        const boxWidth = maxWidth + padding * 3;
+        const lineHeight = fontSize + 6;
+        const boxHeight = (tooltipLines.length * lineHeight) + padding * 2;
+
         const boxX = x - boxWidth / 2;
         const boxY = y - 40 * mapScale - boxHeight; // Above marker
 
         // Box Background
-        ctx.fillStyle = 'rgba(20, 20, 20, 0.9)';
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.95)';
         ctx.strokeStyle = '#4a90e2';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -279,11 +346,28 @@ function drawMap() {
         ctx.fill();
         ctx.stroke();
 
-        // Text
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(loc.name, boxX + boxWidth / 2, boxY + boxHeight / 2);
+        // Draw Lines
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        let currentY = boxY + padding;
+        tooltipLines.forEach((line, index) => {
+            if (index === 0) {
+                // Title
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
+            } else if (line.startsWith('👤')) {
+                // NPC Name
+                ctx.fillStyle = '#ffd700'; // Gold
+                ctx.font = `${fontSize}px "Segoe UI", sans-serif`;
+            } else {
+                // Relationship text
+                ctx.fillStyle = '#cccccc'; // Grey
+                ctx.font = `italic ${fontSize - 2}px "Segoe UI", sans-serif`;
+            }
+            ctx.fillText(line, boxX + padding, currentY);
+            currentY += lineHeight;
+        });
 
         // Triangle pointer
         ctx.beginPath();
@@ -486,28 +570,47 @@ function showWorldReacting() {
 function displayScene(description, choices, isDialogue = false, speakerName = '') {
     const sceneDescriptionDiv = document.getElementById('sceneDescription');
 
-    // Преобразуем \n\n в HTML абзацы для правильного отображения
-    const paragraphs = description.split('\n\n').filter(p => p.trim());
-    const formattedDescription = paragraphs.map(p => `<p style="margin-bottom: 15px; line-height: 1.6;">${p.trim()}</p>`).join('');
+    // 1. Форматирование текста
+    // Разбиваем на абзацы
+    let paragraphs = description.split('\n\n').filter(p => p.trim());
 
-    if (isDialogue && speakerName) {
-        sceneDescriptionDiv.innerHTML = `
-            <div style="border-left: 4px solid #4a90e2; padding-left: 15px; margin: 10px 0;">
-                <div style="color: #4a90e2; font-weight: bold; margin-bottom: 8px;">
-                    💬 ${speakerName} говорит:
-                </div>
-                <div style="font-style: italic;">${formattedDescription}</div>
-            </div>
-        `;
-    } else {
-        sceneDescriptionDiv.innerHTML = formattedDescription;
+    // 2. Подсветка прямой речи (если это диалог или просто текст с речью)
+    // Регулярка для кириллических «...» и обычных "..."
+    if (isDialogue || description.includes('«') || description.includes('"')) {
+        paragraphs = paragraphs.map(p => {
+            // Подсветка: заменяем кавычки на span с классом
+            return p.replace(/«([^»]+)»/g, '<span class="dialogue-speech">«$1»</span>')
+                .replace(/"([^"]+)"/g, '<span class="dialogue-speech">"$1"</span>');
+        });
     }
 
+    const formattedDescription = paragraphs.map(p => `<p class="scene-paragraph">${p.trim()}</p>`).join('');
+
+    // 3. Сборка HTML
+    let htmlContent = '';
+
+    // Если это диалог, добавляем красивый бейдж собеседника
+    if (isDialogue && speakerName) {
+        htmlContent += `
+            <div class="dialogue-header">
+                <div class="dialogue-badge">
+                    <span class="dialogue-icon">💬</span>
+                    <span class="dialogue-name">${speakerName}</span>
+                </div>
+                <div class="dialogue-line"></div>
+            </div>
+        `;
+    }
+
+    htmlContent += `<div class="scene-text">${formattedDescription}</div>`;
+    sceneDescriptionDiv.innerHTML = htmlContent;
+
+    // 4. Обновление стилей кнопок выбора
     const choicesList = document.getElementById('choicesList');
     const choicesHeader = document.querySelector('.choices-container h4');
 
     if (isDialogue) {
-        choicesHeader.textContent = '💬 Выберите ответ:';
+        choicesHeader.innerHTML = `💬 Ответ для <span style="color: #4a90e2">${speakerName}</span>:`;
     } else {
         choicesHeader.textContent = '🎮 Выберите действие:';
     }
@@ -519,8 +622,8 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
         choiceBtn.className = 'choice-btn';
 
         if (isDialogue) {
-            choiceBtn.style.borderLeft = '4px solid #4a90e2';
-            choiceBtn.innerHTML = `<span style="color: #4a90e2;">➤</span> ${choice}`;
+            choiceBtn.classList.add('dialogue-choice');
+            choiceBtn.innerHTML = `<span class="choice-icon">➤</span> ${choice}`;
         } else {
             choiceBtn.textContent = `${index + 1}. ${choice}`;
         }
@@ -529,6 +632,9 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
 
         choicesList.appendChild(choiceBtn);
     });
+
+    // Auto-scroll to top
+    document.querySelector('.game-main').scrollTop = 0;
 }
 
 function updateUI() {
