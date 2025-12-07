@@ -557,6 +557,7 @@ function parseAIResponse(text) {
             .replace(/\/\/.*$/gm, '')
             .replace(/,\s*}/g, '}')
             .replace(/,\s*]/g, ']')
+            .replace(/\\"(\w+)\\"/g, '"$1"') // Fix: \"key\" -> "key" (AI escaping glitch)
             .replace(/:(\s*)\+(\d)/g, ':$1$2') // Fix: :+10 → :10 (AI копирует + из примеров)
             .trim();
 
