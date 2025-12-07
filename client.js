@@ -214,14 +214,39 @@ function drawMap() {
         ctx.fillText(icon, x, y);
     });
 
-    // Draw Player Arrow (Always on top of map but below tooltip)
+    // Draw Player Arrow
+    let playerX = centerX;
+    let playerY = centerY;
+
+    // Try to find player position based on current location name
+    if (gameState.location) {
+        // Simple search: does any map location name overlap with current location string?
+        const currentLocObj = gameState.worldMap.find(loc =>
+            gameState.location.toLowerCase().includes(loc.name.toLowerCase()) ||
+            loc.name.toLowerCase().includes(gameState.location.toLowerCase())
+        );
+
+        if (currentLocObj) {
+            playerX = centerX + (currentLocObj.x * 30 * mapScale);
+            playerY = centerY + (currentLocObj.y * 30 * mapScale);
+        } else {
+            // If not found, default to the last discovered location (most likely where we are)
+            const lastLoc = gameState.worldMap[gameState.worldMap.length - 1];
+            if (lastLoc) {
+                playerX = centerX + (lastLoc.x * 30 * mapScale);
+                playerY = centerY + (lastLoc.y * 30 * mapScale);
+            }
+        }
+    }
+
     ctx.fillStyle = '#ff4444';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(centerX, centerY + 10 * mapScale);
-    ctx.lineTo(centerX - 8 * mapScale, centerY - 10 * mapScale);
-    ctx.lineTo(centerX + 8 * mapScale, centerY - 10 * mapScale);
+    ctx.moveTo(playerX, playerY - 8 * mapScale); // Tip (up)
+    ctx.lineTo(playerX - 6 * mapScale, playerY + 6 * mapScale); // Left
+    ctx.lineTo(playerX, playerY + 3 * mapScale); // Notch
+    ctx.lineTo(playerX + 6 * mapScale, playerY + 6 * mapScale); // Right
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
