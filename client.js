@@ -24,8 +24,10 @@ function startGame() {
     // Очищаем старое сохранение при старте новой игры
     clearLocalStorageSave();
 
-    // Подключение к WebSocket
-    ws = new WebSocket('ws://localhost:3000');
+    // Подключение к WebSocket (автоопределение хоста)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    ws = new WebSocket(`${protocol}//${host}`);
 
     ws.onopen = () => {
         console.log('Connected to server');
@@ -601,7 +603,9 @@ function initHistoryModal() {
 }
 
 function restoreGame(savedData) {
-    ws = new WebSocket('ws://localhost:3000');
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    ws = new WebSocket(`${protocol}//${host}`);
 
     ws.onopen = () => {
         console.log('✅ WebSocket подключен при восстановлении');

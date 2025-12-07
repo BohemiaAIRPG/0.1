@@ -373,7 +373,7 @@ function buildPrompt(gameState, playerChoice, previousScene) {
 ХАРАКТЕРИСТИКИ:
 - Здоровье: ${gameState.health}/${gameState.maxHealth}
 - Выносливость: ${gameState.stamina}/${gameState.maxStamina}
-- Монеты: ${gameState.coins} (для справки, возвращай ИЗМЕНЕНИЕ!)
+- Гроши: ${gameState.coins} (для справки, возвращай ИЗМЕНЕНИЕ!)
 - Репутация: ${gameState.reputation}/100
 - Мораль: ${gameState.morality}/100
 
@@ -393,6 +393,28 @@ ${gameState.character.background}
 ═══ ИСТОРИЯ ПУТЕШЕСТВИЯ ═══
 ${historyContext}
 
+═══ ОТНОШЕНИЯ И ЗНАКОМСТВА ═══
+${Object.entries(gameState.character.relationships).map(([name, desc]) => `- ${name}: ${desc}`).join('\n') || 'Пока никого не знаете.'}
+
+═══ АКТИВНЫЕ ЗАДАЧИ (КВЕСТЫ) ═══
+${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})`).join('\n') || 'Нет активных задач.'}
+
+
+
+═══ ЭКОНОМИКА (ГРОШИ) ═══
+Валюта: Пражские гроши (Groschen). 1 грош — это основная монета.
+ЦЕНЫ (ОРИЕНТИР):
+- 🍺 Кружка пива / Хлеб: 2-5 грошей (не монет!)
+- 🛌 Ночлег в корчме: 2 гроша
+- 🥩 Еда (Мясо/Сыр): 5-15 грошей
+- 🗡️ Дешевое оружие: 50-200 грошей
+- ⚔️ Хороший меч / Доспех: 500-2000+ грошей
+
+⚠️ БАЛАНС ЗАРАБОТКА (НЕ ЗАВЫШАЙ!):
+- Милостыня: 1-5 грошей
+- Черная работа: 10-30 грошей
+- Опасный контракт: 100-300 грошей
+
 ═══ ТЕКУЩАЯ СИТУАЦИЯ ═══
 Предыдущая сцена: ${previousScene || 'Начало игры'}
 Действие игрока: "${playerChoice}"
@@ -401,9 +423,13 @@ ${historyContext}
 1. РЕАЛИСТИЧНОСТЬ: Мир жестокий. Ошибки приводят к смерти. Учитывай навыки (0 = новичок).
 2. СМЕРТЬ: gameOver: true, deathReason, description - только при реальной смерти.
 3. ТЮРЬМА: НЕ конец игры. gameOver: false.
-4. ОПИСАНИЕ: Макс 130 слов, 4-6 предложений. Дели на абзацы \\n\\n. Атмосферно. Используй "вы/вас".
+4. ОПИСАНИЕ: Макс 130 слов, 4-6 предложений. Атмосферно. Используй "вы/вас". ТОЛЬКО СРЕДНЕВЕКОВЬЕ (никаких машин/небоскрёбов, если это не сюжетный триггер).
+
+
 
 ❌ ТИПИЧНЫЕ ОШИБКИ (НЕ ДЕЛАЙ ТАК!):
+- БЕЗ ПОВТОРЯЮЩИХСЯ ВИДЕНИЙ: "Внезапно мелькает видение..." — ЗАПРЕЩЕНО! Описывай только реальный мир.
+- Дублирование NPC: Если персонаж есть в "ОТНОШЕНИЯ", используй ТО ЖЕ ИМЯ!
 - "осмотреть" → newItems:[{...}] // НЕТ! Не брал!
 - "выслушать" → coins:+50 // НЕТ! Не принял деньги!
 - "съесть яблоко" → usedItems:[], health:0 // НЕТ! Нужно ["Яблоко"], health:+10
@@ -440,7 +466,9 @@ ${historyContext}
   "speakerName": "",
   "skillXP": {},
   "equipment": {weapon: {name: "", condition: 0}, armor: {name: "", condition: 0}},
+  "equipment": {weapon: {name: "", condition: 0}, armor: {name: "", condition: 0}},
   "characterUpdate": {recentEvents: [], importantChoices: [], relationships: {}, milestone: ""},
+  "questsUpdate": [{name: "Quest Name", status: "active/completed/failed", description: "Updated info"}],
   "usedItems": [],
   "newItems": [],
   "choices": ["Вариант1", "Вариант2", "Вариант3"]
@@ -784,6 +812,22 @@ function applyChanges(gameState, parsed) {
         }
     }
 
+    // Обновляем квесты (новая логика)
+    if (parsed.questsUpdate) {
+        if (!gameState.quests) gameState.quests = [];
+        parsed.questsUpdate.forEach(q => {
+            const existing = gameState.quests.find(existingQ => existingQ.name === q.name);
+            if (existing) {
+                existing.status = q.status;
+                existing.description = q.description;
+                console.log(`📜 Квест обновлён: "${q.name}" (${q.status})`);
+            } else {
+                gameState.quests.push(q);
+                console.log(`✨ Новый квест: "${q.name}"`);
+            }
+        });
+    }
+
     // Обновляем инвентарь
     if (Array.isArray(parsed.usedItems) && parsed.usedItems.length > 0) {
         console.log(`📦 AI указал использованные предметы:`, parsed.usedItems);
@@ -807,7 +851,8 @@ function applyChanges(gameState, parsed) {
     if (Array.isArray(parsed.newItems) && parsed.newItems.length > 0) {
         console.log(`📦 AI добавил новые предметы:`, parsed.newItems);
         parsed.newItems.forEach(item => {
-            const existing = gameState.inventory.find(i => i.name === item.name);
+            const normalizedName = item.name.trim(); // Fix: убираем пробелы (Arrow vs Arrow )
+            const existing = gameState.inventory.find(i => i.name === normalizedName);
             if (existing) {
                 existing.quantity += item.quantity || 1;
                 console.log(`  ➕ Добавлено: ${item.name} x${item.quantity || 1} (всего: ${existing.quantity})`);
