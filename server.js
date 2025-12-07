@@ -1069,6 +1069,23 @@ function applyChanges(gameState, parsed) {
         console.warn('⚠️ EXHAUSTION PENALTY: Stamina capped at 50');
     }
 
+    // 3. Logic Hardening (Prevent AI Hallucinations)
+    // Guard: Cannot gain Satiety (>0) without using items (eating)
+    if (parsed.satiety > 0) {
+        if (!parsed.usedItems || parsed.usedItems.length === 0) {
+            console.warn(`🚫 Prevented phantom Satiety increase (+${parsed.satiety}) - No items used!`);
+            parsed.satiety = 0;
+        }
+    }
+
+    // Guard: Cannot gain major Energy (>5) without significant time passage (>=1 hour)
+    if (parsed.energy > 5) {
+        if (!parsed.timeChange || parsed.timeChange < 1) {
+            console.warn(`🚫 Prevented phantom Energy increase (+${parsed.energy}) - No time passed!`);
+            parsed.energy = 0;
+        }
+    }
+
     // Recover stats from AI response (Eating/Sleeping)
     if (parsed.satiety) gameState.satiety = Math.min(100, (gameState.satiety || 0) + parsed.satiety);
     if (parsed.energy) gameState.energy = Math.min(100, (gameState.energy || 0) + parsed.energy);
