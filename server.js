@@ -5,10 +5,10 @@ import { readFileSync } from 'fs';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 const COMET_API_KEY = 'sk-jwPgtUPNYyGb7YoirTUy26AKqmdFVzHLsHye55rV6OxIYDMK';
 const COMET_API_BASE = 'https://api.cometapi.com/v1';
-const MODEL_NAME = 'grok-4-fast-reasoning';
+const MODEL_NAME = 'grok-4-1-fast-non-reasoning';
 
 // HTTP сервер для статики
 const httpServer = createServer((req, res) => {
@@ -79,7 +79,7 @@ async function listSaves() {
     try {
         const files = await fs.readdir(SAVES_DIR);
         const saves = [];
-        
+
         for (const file of files) {
             if (file.startsWith('save_') && file.endsWith('.json')) {
                 try {
@@ -97,7 +97,7 @@ async function listSaves() {
                 }
             }
         }
-        
+
         return saves;
     } catch (error) {
         console.error('Error listing saves:', error);
@@ -136,7 +136,7 @@ async function logAIParseFailure(sessionId, choice, attempt, rawResponse, errorM
 function createGameState(name, gender = 'male') {
     const genderText = gender === 'female' ? 'женщина' : 'мужчина';
     const genderPronoun = gender === 'female' ? 'она' : 'он';
-    
+
     return {
         name,
         gender,
@@ -201,7 +201,7 @@ async function generateWithAI(prompt) {
     try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
-        
+
         const response = await fetch(`${COMET_API_BASE}/chat/completions`, {
             method: 'POST',
             headers: {
@@ -222,16 +222,16 @@ async function generateWithAI(prompt) {
             }),
             signal: controller.signal
         });
-        
+
         clearTimeout(timeoutId);
-        
+
         if (!response.ok) {
             throw new Error(`API error ${response.status}`);
         }
-        
+
         const data = await response.json();
         return data.choices[0].message.content;
-        
+
     } catch (error) {
         console.error('AI Error:', error.message);
         throw error;
@@ -240,8 +240,8 @@ async function generateWithAI(prompt) {
 
 // Функция для форматирования даты
 function formatDate(date) {
-    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
-                    'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+        'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     return `${date.day} ${months[date.month - 1]} ${date.year} года`;
 }
 
@@ -258,32 +258,32 @@ function buildHistoryContext(gameState) {
             timeOfDay: gameState.time || 'утро'
         };
     }
-    
+
     const currentDay = gameState.date.dayOfGame;
-    
+
     // 1. ДРЕВНЯЯ ИСТОРИЯ (>30 дней назад) - только вехи
     const milestones = gameState.character.milestones || [];
     const ancientMilestones = milestones.filter(m => currentDay - m.dayOfGame > 30);
-    
+
     // 2. СРЕДНЯЯ ИСТОРИЯ (7-30 дней назад) - сжато
     const recentMilestones = milestones.filter(m => {
         const diff = currentDay - m.dayOfGame;
         return diff >= 7 && diff <= 30;
     });
-    
+
     // 3. НЕДАВНИЕ СОБЫТИЯ (последние 7 дней) - подробно
     const recentEvents = gameState.character.recentEvents || [];
-    
+
     // 4. ПОСЛЕДНИЕ ДЕЙСТВИЯ - РАСШИРЕННАЯ ИСТОРИЯ
     // Берем последние 15 действий для полного контекста!
     const lastActions = gameState.history.slice(-15);
-    
+
     // Разделяем на группы для лучшей читаемости
     const veryRecentActions = lastActions.slice(-5); // Последние 5 - полностью
     const recentActions = lastActions.slice(-15, -5); // Предыдущие 10 - сжато
-    
+
     let historyText = '';
-    
+
     // Древние вехи
     if (ancientMilestones.length > 0) {
         historyText += '═══ ВАЖНЫЕ ВЕХИ ПУТЕШЕСТВИЯ ═══\n';
@@ -292,7 +292,7 @@ function buildHistoryContext(gameState) {
         });
         historyText += '\n';
     }
-    
+
     // Средняя история
     if (recentMilestones.length > 0) {
         historyText += '═══ СОБЫТИЯ ПОСЛЕДНИХ НЕДЕЛЬ ═══\n';
@@ -301,7 +301,7 @@ function buildHistoryContext(gameState) {
         });
         historyText += '\n';
     }
-    
+
     // Недавние события - РАСШИРЕНО до 15!
     if (recentEvents.length > 0) {
         historyText += '═══ НЕДАВНИЕ СОБЫТИЯ (последние 7 дней) ═══\n';
@@ -310,7 +310,7 @@ function buildHistoryContext(gameState) {
         });
         historyText += '\n';
     }
-    
+
     // История действий - структурированно
     if (recentActions.length > 0) {
         historyText += '═══ ПРЕДЫДУЩИЕ ДЕЙСТВИЯ (10 ходов назад) ═══\n';
@@ -319,7 +319,7 @@ function buildHistoryContext(gameState) {
         });
         historyText += '\n';
     }
-    
+
     // Последние действия - ПОЛНЫЙ КОНТЕКСТ
     if (veryRecentActions.length > 0) {
         historyText += '═══ ПОСЛЕДНИЕ ДЕЙСТВИЯ (полное описание) ═══\n';
@@ -329,14 +329,14 @@ function buildHistoryContext(gameState) {
             historyText += `Что произошло: ${h.scene}\n`;
         });
     }
-    
+
     // КРИТИЧЕСКИ ВАЖНО: 3 последних ПОЛНЫХ сцены для максимального контекста
     const last3Scenes = gameState.history.slice(-3);
     if (last3Scenes.length > 0) {
         historyText += '\n\n═══════════════════════════════════════════════════════════════\n';
         historyText += 'ПОСЛЕДНИЕ 3 ПОЛНЫЕ СЦЕНЫ (для глубокого контекста)\n';
         historyText += '═══════════════════════════════════════════════════════════════\n';
-        
+
         last3Scenes.forEach((scene, idx) => {
             historyText += `\n┌─────────────────────────────────────────────────────────────┐\n`;
             historyText += `│ СЦЕНА ${idx + 1} (${last3Scenes.length - idx} ход назад)\n`;
@@ -352,13 +352,13 @@ function buildHistoryContext(gameState) {
             }
         });
     }
-    
+
     return historyText || 'Начало приключения';
 }
 
 function buildPrompt(gameState, playerChoice, previousScene) {
     const historyContext = buildHistoryContext(gameState);
-    
+
     return `⚠️⚠️⚠️ ОТВЕЧАЙ СТРОГО ТОЛЬКО ВАЛИДНЫМ JSON! БЕЗ markdown, текста, комментариев, объяснений или подписи. Начинай СРАЗУ с { и заканчивай } ⚠️⚠️⚠️
 
 Ты мастер повествования RPG в стиле Kingdom Come: Deliverance (средневековая Богемия 1403). Создавай реалистичный, жестокий мир с последствиями.
@@ -398,29 +398,33 @@ ${historyContext}
 Действие игрока: "${playerChoice}"
 
 ═══ ПРАВИЛА ИГРЫ ═══
-1. РЕАЛИСТИЧНОСТЬ: Мир жестокий. Ошибки приводят к смерти. Учитывай низкие навыки (0 уровень = новичок, провал вероятен).
-2. СМЕРТЬ: Если травмы несовместимы с жизнью (меч в сердце, падение с высоты) - gameOver: true, deathReason: "Причина", description: "Описание смерти".
-3. ТЮРЬМА: Не конец игры. Продолжай историю с вариантами побега. Используй gameOver: false.
-4. ОПИСАНИЕ: Макс 130 слов, 4-6 предложений. Дели на абзацы \\n\\n. Атмосферно: детали, звуки, запахи. Используй "вы/вас". Не упоминать механики.
-5. ИЗМЕНЕНИЯ:
-   - health/stamina: +10/-5 (дельта)
-   - coins: ИЗМЕНЕНИЕ (+10/-5/0), игра обновит баланс
-   - reputation: ЧИСЛО (дельта). ПО УМОЛЧАНИЮ 0! Меняй только если поступок заметен и значим.
-     * Никто не видел / действовал ради себя → 0
-     * Обычная вежливость / работа / покупка → 0
-     * Малое доброе дело (кто-то благодарен) → +1 (если репутация < 60)
-     * Героический поступок при свидетелях → +2..+3 (если репутация < 70)
-     * При репутации ≥ 70 положительное изменение максимум +1 и только за подвиг, иначе 0
-     * Плохие поступки: -3..-10 (воровство, насилие, обман), если заметили
-     * Тяжкое преступление → -12..-20
-     * Если сомневаешься → 0
-   - timeChange: Часы (0.5-12)
-   - locationChange: Новая локация или ""
-6. НАВЫКИ: Давай XP за применение (успех: 8-20, частичный: 4-10, неудача: 2-5, пассив: 0). Навыки: combat, stealth, speech, survival.
-7. ИНВЕНТАРЬ: usedItems: массив имен (повтор для количества, e.g. ["хлеб", "хлеб"]). newItems: [{name, quantity, type}].
-8. ДИАЛОГИ: isDialogue: true, speakerName: "Имя", choices: реплики. Иначе false.
-9. ОБНОВЛЕНИЕ ПЕРСОНАЖА: characterUpdate с recentEvents, importantChoices, relationships, milestone (только эпохальное).
-10. ВЫБОРЫ: 3 варианта, разнообразные, на русском.
+1. РЕАЛИСТИЧНОСТЬ: Мир жестокий. Ошибки приводят к смерти. Учитывай навыки (0 = новичок).
+2. СМЕРТЬ: gameOver: true, deathReason, description - только при реальной смерти.
+3. ТЮРЬМА: НЕ конец игры. gameOver: false.
+4. ОПИСАНИЕ: Макс 130 слов, 4-6 предложений. Дели на абзацы \\n\\n. Атмосферно. Используй "вы/вас".
+
+❌ ТИПИЧНЫЕ ОШИБКИ (НЕ ДЕЛАЙ ТАК!):
+- "осмотреть" → newItems:[{...}] // НЕТ! Не брал!
+- "выслушать" → coins:+50 // НЕТ! Не принял деньги!
+- "съесть яблоко" → usedItems:[], health:0 // НЕТ! Нужно ["Яблоко"], health:+10
+- "убедить стражника" → skillXP:{} // НЕТ! Нужно {"speech":15}
+
+✅ ПРАВИЛЬНО:
+- "осмотреть" → newItems:[] (только описать)
+- "взять X" → newItems:[{name:"X",quantity:1,type:"item"}]
+- "съесть X" → usedItems:["X"], health:+10
+- "выпить зелье" → usedItems:["Лечебное зелье"], health:+20
+- "выслушать" → coins:0
+- "принять оплату" → coins:+50
+- бой/атака → skillXP:{"combat":15}, health:-10
+- убедить/торг/обман/просьба → skillXP:{"speech":15}
+- скрытность/кража → skillXP:{"stealth":15}
+- охота/рыбалка/травы → skillXP:{"survival":15}
+- отдых/сон → stamina:+30, health:+10
+
+5. locationChange: новая локация или "".
+6. ДИАЛОГИ: isDialogue: true, speakerName.
+7. ВЫБОРЫ: 3 варианта на русском.
 
 ═══ ФОРМАТ ОТВЕТА (ТОЛЬКО JSON) ═══
 {
@@ -466,42 +470,43 @@ function parseAIResponse(text) {
             .replace(/\/\/.*$/gm, '')
             .replace(/,\s*}/g, '}')
             .replace(/,\s*]/g, ']')
+            .replace(/:(\s*)\+(\d)/g, ':$1$2') // Fix: :+10 → :10 (AI копирует + из примеров)
             .trim();
-        
+
         console.log('🧹 Cleaned AI response:', cleaned);
-        
+
         const parsed = JSON.parse(cleaned);
-        
+
         console.log('🔍 RAW AI RESPONSE:', JSON.stringify(parsed, null, 2));
-        
+
         // КРИТИЧЕСКИ ВАЖНО: Валидация обязательных полей
         if (!parsed.description) parsed.description = 'Вы продолжаете свой путь...';
-        
+
         // Логируем длину описания
         if (parsed.description) {
             const words = parsed.description.split(/\s+/);
             console.log(`📝 Получено описание: ${words.length} слов`);
         }
-        
+
         if (!Array.isArray(parsed.choices) || parsed.choices.length === 0) {
             parsed.choices = ['Продолжить', 'Осмотреться', 'Отдохнуть'];
         }
-        
+
         // КРИТИЧЕСКИ ВАЖНО: Проверка и инициализация инвентарных полей
         if (!Array.isArray(parsed.usedItems)) {
             console.warn('⚠️ AI НЕ ПРИСЛАЛ usedItems! Инициализирую пустым массивом.');
             parsed.usedItems = [];
-                } else {
+        } else {
             console.log(`✅ AI прислал usedItems:`, parsed.usedItems);
         }
-        
+
         if (!Array.isArray(parsed.newItems)) {
             console.warn('⚠️ AI НЕ ПРИСЛАЛ newItems! Инициализирую пустым массивом.');
             parsed.newItems = [];
         } else {
             console.log(`✅ AI прислал newItems:`, parsed.newItems);
         }
-        
+
         // Валидация структуры newItems
         if (Array.isArray(parsed.newItems) && parsed.newItems.length > 0) {
             parsed.newItems = parsed.newItems.filter(item => {
@@ -518,7 +523,7 @@ function parseAIResponse(text) {
                 return true;
             });
         }
-        
+
         // Валидация usedItems
         if (Array.isArray(parsed.usedItems) && parsed.usedItems.length > 0) {
             parsed.usedItems = parsed.usedItems.filter(itemName => {
@@ -529,7 +534,7 @@ function parseAIResponse(text) {
                 return true;
             });
         }
-        
+
         return parsed;
     } catch (error) {
         console.error('❌ Parse error! Raw text:', text);
@@ -544,7 +549,7 @@ async function requestAIResponse(gameState, choice, previousScene, attempt = 0, 
     const prompt = attempt === 0
         ? basePrompt
         : `${basePrompt}\n\n⚠️ ТЫ ПРИСЛАЛ НЕВЕРНЫЙ ФОРМАТ! ПОВТОРИ ТОТ ЖЕ ОТВЕТ СТРОГО В ВАЛИДНОМ JSON БЕЗ ТЕКСТА ВНЕ { }.`;
-    
+
     const aiResponse = await generateWithAI(prompt);
     console.log(`🧠 RAW AI RESPONSE (attempt ${attempt + 1}):`, aiResponse);
     try {
@@ -555,7 +560,16 @@ async function requestAIResponse(gameState, choice, previousScene, attempt = 0, 
             console.warn(`⚠️ AI response parse failed (attempt ${attempt + 1}). Retrying...`);
             return requestAIResponse(gameState, choice, previousScene, attempt + 1, sessionId);
         }
-        throw error;
+        // Fallback вместо ошибки — чтобы игра не ломалась
+        console.error('❌ Все попытки парсинга провалились. Возвращаем fallback.');
+        return {
+            description: 'Мир замер на мгновение... Попробуйте повторить действие.',
+            choices: ['Попробовать снова', 'Осмотреться', 'Подождать'],
+            health: 0, stamina: 0, coins: 0, reputation: 0, morality: 0,
+            timeChange: 0, locationChange: '', isDialogue: false, speakerName: '',
+            skillXP: {}, usedItems: [], newItems: [],
+            characterUpdate: { recentEvents: [], importantChoices: [], relationships: {}, milestone: '' }
+        };
     }
 }
 
@@ -571,16 +585,16 @@ function updateTime(gameState, hoursToAdd) {
             timeOfDay: 'утро'
         };
     }
-    
+
     // Добавляем часы
     gameState.date.hour += hoursToAdd;
-    
+
     // Обрабатываем переход через сутки
     while (gameState.date.hour >= 24) {
         gameState.date.hour -= 24;
         gameState.date.day += 1;
         gameState.date.dayOfGame += 1;
-        
+
         // Обрабатываем переход месяца (июнь - 30 дней)
         const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
         if (gameState.date.day > daysInMonth[gameState.date.month - 1]) {
@@ -591,10 +605,10 @@ function updateTime(gameState, hoursToAdd) {
                 gameState.date.year += 1;
             }
         }
-        
+
         console.log(`📅 Новый день: ${formatDate(gameState.date)} (День ${gameState.date.dayOfGame})`);
     }
-    
+
     // Определяем время суток
     const hour = gameState.date.hour;
     if (hour >= 5 && hour < 12) {
@@ -603,10 +617,10 @@ function updateTime(gameState, hoursToAdd) {
         gameState.date.timeOfDay = 'день';
     } else if (hour >= 18 && hour < 22) {
         gameState.date.timeOfDay = 'вечер';
-                } else {
+    } else {
         gameState.date.timeOfDay = 'ночь';
     }
-    
+
     console.log(`⏰ Время обновлено: ${gameState.date.hour}:00 (${gameState.date.timeOfDay}), +${hoursToAdd} часов`);
 }
 
@@ -615,14 +629,14 @@ function applyChanges(gameState, parsed) {
     if (parsed.timeChange !== undefined && parsed.timeChange !== null) {
         updateTime(gameState, parsed.timeChange);
     }
-    
+
     // Обновляем локацию
     if (parsed.locationChange && parsed.locationChange.trim()) {
         const oldLocation = gameState.location;
         gameState.location = parsed.locationChange;
         console.log(`📍 Локация изменена: ${oldLocation} → ${gameState.location}`);
     }
-    
+
     // Применяем изменения характеристик
     if (parsed.health) {
         gameState.health = Math.max(0, Math.min(gameState.maxHealth, gameState.health + parsed.health));
@@ -683,7 +697,7 @@ function applyChanges(gameState, parsed) {
     if (parsed.morality !== undefined && parsed.morality !== null) {
         gameState.morality = Math.max(0, Math.min(100, gameState.morality + parsed.morality));
     }
-    
+
     // Обновляем навыки
     if (parsed.skillXP) {
         Object.entries(parsed.skillXP).forEach(([skill, xp]) => {
@@ -692,7 +706,7 @@ function applyChanges(gameState, parsed) {
                 const oldXP = gameState.skills[skill].xp;
                 gameState.skills[skill].xp += xp;
                 console.log(`📈 Навык ${skill}: получено ${xp} опыта (было: ${oldXP}, стало: ${gameState.skills[skill].xp})`);
-                
+
                 while (gameState.skills[skill].xp >= gameState.skills[skill].nextLevel) {
                     gameState.skills[skill].level++;
                     gameState.skills[skill].xp -= gameState.skills[skill].nextLevel;
@@ -702,7 +716,7 @@ function applyChanges(gameState, parsed) {
             }
         });
     }
-    
+
     // Обновляем экипировку (КРИТИЧЕСКИ ВАЖНО!)
     if (parsed.equipment) {
         if (parsed.equipment.weapon) {
@@ -715,7 +729,7 @@ function applyChanges(gameState, parsed) {
                 console.log(`⚔️ Оружие изменено: "${oldWeapon}" → "${gameState.equipment.weapon.name}"`);
             }
         }
-        
+
         if (parsed.equipment.armor) {
             const oldArmor = gameState.equipment.armor.name;
             gameState.equipment.armor = {
@@ -727,7 +741,7 @@ function applyChanges(gameState, parsed) {
             }
         }
     }
-    
+
     // Обновляем историю персонажа
     if (parsed.characterUpdate) {
         if (Array.isArray(parsed.characterUpdate.recentEvents)) {
@@ -737,7 +751,7 @@ function applyChanges(gameState, parsed) {
                 gameState.character.recentEvents = gameState.character.recentEvents.slice(-30);
             }
         }
-        
+
         if (Array.isArray(parsed.characterUpdate.importantChoices)) {
             gameState.character.importantChoices.push(...parsed.characterUpdate.importantChoices);
             // Храним последние 15 важных выборов - они определяют характер!
@@ -745,13 +759,17 @@ function applyChanges(gameState, parsed) {
                 gameState.character.importantChoices = gameState.character.importantChoices.slice(-15);
             }
         }
-        
+
         if (parsed.characterUpdate.relationships) {
             Object.entries(parsed.characterUpdate.relationships).forEach(([name, description]) => {
-                gameState.character.relationships[name] = description;
+                // Защита от [object Object] — если AI вернул объект вместо строки
+                const descStr = typeof description === 'string'
+                    ? description
+                    : JSON.stringify(description);
+                gameState.character.relationships[name] = descStr;
             });
         }
-        
+
         // Добавляем веху если AI указал её
         if (parsed.characterUpdate.milestone && parsed.characterUpdate.milestone.trim()) {
             if (!gameState.character.milestones) {
@@ -765,7 +783,7 @@ function applyChanges(gameState, parsed) {
             console.log(`📜 Добавлена веха: "${parsed.characterUpdate.milestone}"`);
         }
     }
-    
+
     // Обновляем инвентарь
     if (Array.isArray(parsed.usedItems) && parsed.usedItems.length > 0) {
         console.log(`📦 AI указал использованные предметы:`, parsed.usedItems);
@@ -785,7 +803,7 @@ function applyChanges(gameState, parsed) {
     } else {
         console.log(`📦 AI не указал использованные предметы (usedItems пустой)`);
     }
-    
+
     if (Array.isArray(parsed.newItems) && parsed.newItems.length > 0) {
         console.log(`📦 AI добавил новые предметы:`, parsed.newItems);
         parsed.newItems.forEach(item => {
@@ -804,29 +822,29 @@ function applyChanges(gameState, parsed) {
 wss.on('connection', (ws) => {
     const sessionId = Math.random().toString(36).substr(2, 9);
     console.log(`✅ Client connected, SessionID: ${sessionId}`);
-    
+
     // Сохраняем sessionId в объекте ws для использования в обработчиках
     ws.sessionId = sessionId;
-    
+
     // Отправляем sessionId клиенту
     ws.send(JSON.stringify({ type: 'connected', sessionId }));
-    
+
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
             const sessionId = ws.sessionId;
-            
+
             if (data.type === 'start') {
                 const gameState = createGameState(data.name || 'Странник', data.gender || 'male');
                 gameSessions.set(sessionId, gameState);
                 console.log(`🎮 Новая игра создана для ${gameState.name} (${gameState.gender}), SessionID: ${sessionId}`);
                 console.log(`📊 Активных сессий: ${gameSessions.size}`);
-                
+
                 // Генерируем описание с учетом пола
-                const genderDesc = gameState.gender === 'female' ? 
+                const genderDesc = gameState.gender === 'female' ?
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голая и избитая. Тело покрыто ссадинами и грязью.' :
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голый и избитый. Тело покрыто ссадинами и грязью.';
-                
+
                 ws.send(JSON.stringify({
                     type: 'scene',
                     sessionId,
@@ -838,13 +856,13 @@ wss.on('connection', (ws) => {
                         'Осмотреться - может, рядом есть тряпки или выброшенная одежда'
                     ]
                 }));
-                
+
             } else if (data.type === 'load') {
                 // Загрузка сохраненного состояния
                 console.log(`📂 Получен запрос на загрузку сохранения, SessionID: ${sessionId}`);
-                
+
                 const loadedGameState = data.gameState;
-                
+
                 // Проверка обязательных полей
                 if (!loadedGameState) {
                     console.error('❌ loadedGameState пустой или undefined!');
@@ -854,7 +872,7 @@ wss.on('connection', (ws) => {
                     }));
                     return;
                 }
-                
+
                 if (!loadedGameState.name) {
                     console.error('❌ В gameState отсутствует поле name!');
                     console.error('Структура gameState:', Object.keys(loadedGameState));
@@ -864,9 +882,9 @@ wss.on('connection', (ws) => {
                     }));
                     return;
                 }
-                
+
                 console.log(`✅ Загружается сохранение для персонажа: ${loadedGameState.name}`);
-                
+
                 // Совместимость со старыми сохранениями
                 if (!loadedGameState.date) {
                     loadedGameState.date = {
@@ -878,17 +896,17 @@ wss.on('connection', (ws) => {
                         timeOfDay: loadedGameState.time || 'утро'
                     };
                 }
-                
+
                 // Убираем старое поле time если оно есть
                 if (loadedGameState.time) {
                     delete loadedGameState.time;
                 }
-                
+
                 // Убираем старое поле day если оно есть
                 if (loadedGameState.day) {
                     delete loadedGameState.day;
                 }
-                
+
                 // Проверяем навыки
                 if (loadedGameState.skills) {
                     Object.keys(loadedGameState.skills).forEach(skillName => {
@@ -905,15 +923,15 @@ wss.on('connection', (ws) => {
                 if (loadedGameState._lastRepIncreaseDay === undefined) {
                     loadedGameState._lastRepIncreaseDay = null;
                 }
-                
+
                 // Сохраняем состояние в сессии
                 gameSessions.set(sessionId, loadedGameState);
-                
+
                 console.log(`📂 Загружено сохранение для ${loadedGameState.name}, SessionID: ${sessionId}`);
                 console.log(`📊 Активных сессий: ${gameSessions.size}`);
                 console.log(`🔍 Сохранено в gameSessions.get(${sessionId}): ${gameSessions.has(sessionId) ? 'ДА ✅' : 'НЕТ ❌'}`);
                 console.log(`🔍 Список всех сессий: [${Array.from(gameSessions.keys()).join(', ')}]`);
-                
+
                 // Отправляем подтверждение загрузки
                 ws.send(JSON.stringify({
                     type: 'loaded',
@@ -926,13 +944,13 @@ wss.on('connection', (ws) => {
                         'Отдохнуть'
                     ]
                 }));
-                
+
             } else if (data.type === 'choice') {
                 console.log(`🎯 Получен выбор игрока, SessionID: ${sessionId}`);
                 console.log(`📊 Активных сессий: ${gameSessions.size}, Список: [${Array.from(gameSessions.keys()).join(', ')}]`);
                 console.log(`🔍 ws.sessionId: ${ws.sessionId}`);
                 console.log(`🔍 Проверка наличия сессии: ${gameSessions.has(sessionId) ? 'НАЙДЕНА ✅' : 'НЕ НАЙДЕНА ❌'}`);
-                
+
                 const gameState = gameSessions.get(sessionId);
                 if (!gameState) {
                     console.error(`❌ Сессия не найдена! SessionID: ${sessionId}`);
@@ -941,11 +959,11 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'error', message: `Session not found. SessionID: ${sessionId}` }));
                     return;
                 }
-                
+
                 console.log(`✅ Сессия найдена для ${gameState.name}`);
-                
+
                 ws.send(JSON.stringify({ type: 'generating' }));
-                
+
                 let parsed;
                 try {
                     parsed = await requestAIResponse(gameState, data.choice, data.previousScene, 0, sessionId);
@@ -957,11 +975,11 @@ wss.on('connection', (ws) => {
                     }));
                     return;
                 }
-                
+
                 // КРИТИЧЕСКИ ВАЖНО: Проверяем, умер ли персонаж
                 if (parsed.gameOver) {
                     console.log(`💀 GAME OVER для ${gameState.name}: ${parsed.deathReason}`);
-                    
+
                     // Сохраняем последнее действие перед смертью
                     gameState.history.push({
                         choice: data.choice,
@@ -972,7 +990,7 @@ wss.on('connection', (ws) => {
                         gameOver: true,
                         deathReason: parsed.deathReason
                     });
-                    
+
                     // Отправляем сообщение о смерти
                     ws.send(JSON.stringify({
                         type: 'gameOver',
@@ -986,15 +1004,15 @@ wss.on('connection', (ws) => {
                             reputation: gameState.reputation
                         }
                     }));
-                    
+
                     // Удаляем сессию
                     gameSessions.delete(sessionId);
                     console.log(`🗑️ Сессия ${sessionId} удалена после смерти`);
                     return;
                 }
-                
+
                 applyChanges(gameState, parsed);
-                
+
                 // Сохраняем полную историю: выбор, описание И варианты действий
                 gameState.history.push({
                     choice: data.choice,
@@ -1003,7 +1021,7 @@ wss.on('connection', (ws) => {
                     location: gameState.location,
                     date: { ...gameState.date }
                 });
-                
+
                 ws.send(JSON.stringify({
                     type: 'scene',
                     sessionId,
@@ -1019,7 +1037,7 @@ wss.on('connection', (ws) => {
                     ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
                     return;
                 }
-                
+
                 const success = await saveGame(sessionId, gameState);
                 if (success) {
                     ws.send(JSON.stringify({ type: 'saved', message: 'Игра сохранена!' }));
@@ -1032,7 +1050,7 @@ wss.on('connection', (ws) => {
                     gameSessions.set(sessionId, loadedState);
                     console.log(`💾 Игра загружена для ${loadedState.name}, SessionID: ${sessionId}`);
                     console.log(`📊 Активных сессий: ${gameSessions.size}`);
-                    
+
                     ws.send(JSON.stringify({
                         type: 'loaded',
                         gameState: loadedState,
@@ -1048,21 +1066,21 @@ wss.on('connection', (ws) => {
                     saves
                 }));
             }
-            
+
         } catch (error) {
             console.error('❌❌❌ КРИТИЧЕСКАЯ ОШИБКА ❌❌❌');
             console.error('Тип ошибки:', error.name);
             console.error('Сообщение:', error.message);
             console.error('Stack trace:', error.stack);
             console.error('SessionID:', ws.sessionId);
-            
+
             ws.send(JSON.stringify({
                 type: 'error',
                 message: `${error.name}: ${error.message}`
             }));
         }
     });
-    
+
     ws.on('close', () => {
         console.log(`🔌 Client disconnected, SessionID: ${sessionId}`);
         gameSessions.delete(sessionId);
