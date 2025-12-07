@@ -151,13 +151,13 @@ function createGameState(name, gender = 'male') {
             hour: 9, // 9 утра
             timeOfDay: 'утро' // утро, день, вечер, ночь
         },
-        health: 100,
+        health: 35,
         maxHealth: 100,
-        stamina: 100,
+        stamina: 30,
         maxStamina: 100,
         coins: 0,
-        satiety: 100,  // 100 = сыт, 0 = голодает (теряет здоровье)
-        energy: 100,   // 100 = бодр, < 35 = устал (теряет выносливость)
+        satiety: 20,  // 100 = сыт, 0 = голодает (теряет здоровье)
+        energy: 55,   // 100 = бодр, < 35 = устал (теряет выносливость)
         reputation: 25,
         morality: 50, // Нейтральная мораль
         equipment: {
