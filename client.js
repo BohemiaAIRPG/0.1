@@ -98,23 +98,53 @@ let mapOffsetY = 0;
 let isDraggingMap = false;
 let startDragX, startDragY;
 let hoveredLocation = null; // Track what we are hovering over
+let selectedMapLocation = null; // Selected location for details panel
+let didDragMap = false;
 
 function initMapHandlers() {
     const mapBtn = document.getElementById('mapBtn');
     const mapModal = document.getElementById('mapModal');
     const closeMapModal = document.getElementById('closeMapModal');
     const canvas = document.getElementById('worldMapCanvas');
+    const detailsPanel = document.getElementById('mapDetailsPanel');
+    const closeDetailsBtn = document.getElementById('closeMapDetailsBtn');
+    const setWaypointBtn = document.getElementById('mapSetWaypointBtn');
+    const goToNpcBtn = document.getElementById('mapGoToNpcBtn');
 
     if (!mapBtn || !mapModal || !canvas) return;
 
     mapBtn.addEventListener('click', () => {
         mapModal.classList.remove('hidden');
+        selectedMapLocation = null;
+        if (detailsPanel) detailsPanel.classList.add('hidden');
         drawMap();
     });
 
     closeMapModal.addEventListener('click', () => {
         mapModal.classList.add('hidden');
     });
+
+    if (closeDetailsBtn && detailsPanel) {
+        closeDetailsBtn.addEventListener('click', () => {
+            selectedMapLocation = null;
+            detailsPanel.classList.add('hidden');
+            drawMap();
+        });
+    }
+
+    if (setWaypointBtn) {
+        setWaypointBtn.addEventListener('click', () => {
+            if (!selectedMapLocation) return;
+            setMapWaypoint(selectedMapLocation);
+        });
+    }
+
+    if (goToNpcBtn) {
+        goToNpcBtn.addEventListener('click', () => {
+            const body = document.getElementById('mapDetailsBody');
+            if (body) body.scrollTop = 0;
+        });
+    }
 
     // Zoom
     canvas.addEventListener('wheel', (e) => {
@@ -137,6 +167,7 @@ function initMapHandlers() {
         if (isDraggingMap) {
             mapOffsetX = e.clientX - startDragX;
             mapOffsetY = e.clientY - startDragY;
+            didDragMap = true;
             drawMap();
             return;
         }
@@ -147,8 +178,8 @@ function initMapHandlers() {
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
 
-            const centerX = canvas.width / 2 + mapOffsetX;
-            const centerY = canvas.height / 2 + mapOffsetY;
+            const centerX = rect.width / 2 + mapOffsetX;
+            const centerY = rect.height / 2 + mapOffsetY;
 
             let found = null;
             // Check locations (reverse to catch top-most if overlap)
@@ -176,7 +207,143 @@ function initMapHandlers() {
     window.addEventListener('mouseup', () => {
         isDraggingMap = false;
         canvas.style.cursor = 'default';
+        // Small delay so click after drag doesn't trigger selection
+        setTimeout(() => { didDragMap = false; }, 0);
     });
+
+    // Click to select location
+    canvas.addEventListener('click', (e) => {
+        if (didDragMap) return;
+        const loc = getLocationAtMouse(e, canvas);
+        if (loc) {
+            selectedMapLocation = loc;
+            renderMapDetails(loc);
+            if (detailsPanel) detailsPanel.classList.remove('hidden');
+            drawMap();
+        }
+    });
+}
+
+function getLocationAtMouse(e, canvas) {
+    if (!gameState || !gameState.worldMap || !canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const centerX = rect.width / 2 + mapOffsetX;
+    const centerY = rect.height / 2 + mapOffsetY;
+
+    for (let i = gameState.worldMap.length - 1; i >= 0; i--) {
+        const loc = gameState.worldMap[i];
+        const x = centerX + (loc.x * 30 * mapScale);
+        const y = centerY + (loc.y * 30 * mapScale);
+        const size = 20 * mapScale;
+        const dist = Math.sqrt((mouseX - x) ** 2 + (mouseY - y) ** 2);
+        if (dist < size) return loc;
+    }
+    return null;
+}
+
+function sendClientUpdate(patch) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'clientUpdate', patch }));
+}
+
+function setMapWaypoint(loc) {
+    const waypoint = { locationId: loc.id || null, name: loc.name || '' };
+    if (!gameState) return;
+    if (!gameState.mapWaypoint) gameState.mapWaypoint = { locationId: null, name: '' };
+
+    // optimistic update
+    gameState.mapWaypoint.locationId = waypoint.locationId;
+    gameState.mapWaypoint.name = waypoint.name;
+    sendClientUpdate({ mapWaypoint: waypoint });
+}
+
+function renderMapDetails(loc) {
+    const panel = document.getElementById('mapDetailsPanel');
+    const title = document.getElementById('mapDetailsTitle');
+    const subtitle = document.getElementById('mapDetailsSubtitle');
+    const body = document.getElementById('mapDetailsBody');
+    const setWaypointBtn = document.getElementById('mapSetWaypointBtn');
+    const goToNpcBtn = document.getElementById('mapGoToNpcBtn');
+
+    if (!panel || !title || !subtitle || !body) return;
+
+    title.textContent = loc.name || 'Локация';
+    subtitle.textContent = `${loc.type || 'место'} • X:${loc.x}, Y:${loc.y}`;
+
+    const edges = (gameState.worldEdges || []).filter(e => e.fromId === loc.id || e.toId === loc.id);
+    const connections = edges
+        .map(e => (e.fromId === loc.id ? e.toId : e.fromId))
+        .map(id => (gameState.worldMap || []).find(l => l.id === id))
+        .filter(Boolean);
+
+    const npcsHere = [];
+    if (gameState && gameState.npcs) {
+        Object.values(gameState.npcs).forEach(n => {
+            if (!n) return;
+            if (n.lastSeen?.locationId && loc.id && n.lastSeen.locationId === loc.id) npcsHere.push(n);
+            else if (n.lastSeen?.locationName && loc.name) {
+                const a = String(n.lastSeen.locationName).toLowerCase();
+                const b = String(loc.name).toLowerCase();
+                if (a.includes(b) || b.includes(a)) npcsHere.push(n);
+            }
+        });
+    }
+
+    body.innerHTML = `
+        <div style="color:#ccc; line-height:1.5;">
+            <div style="margin-bottom:10px; color:#888; font-size:0.9em;">${loc.description ? loc.description : 'Описание отсутствует.'}</div>
+            <div style="margin-bottom:12px;">
+                <strong style="color:#4a90e2;">Связи</strong>
+                <div style="margin-top:6px; display:flex; flex-direction:column; gap:6px;">
+                    ${connections.length ? connections.map(c => `<div style="background: rgba(255,255,255,0.03); padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">${c.name}</div>`).join('') : `<div style="color:#666; font-style:italic;">Нет известных путей</div>`}
+                </div>
+            </div>
+            <div>
+                <strong style="color:#ffd700;">NPC здесь</strong>
+                <div style="margin-top:6px; display:flex; flex-direction:column; gap:6px;">
+                    ${npcsHere.length ? npcsHere.map(n => `<div style="background: rgba(255,215,0,0.06); padding:8px; border-radius:8px; border:1px solid rgba(255,215,0,0.15);">
+                        <div style="display:flex; justify-content:space-between; gap:10px;">
+                            <span style="color:#ffd700; font-weight:600;">${n.name}</span>
+                            <span style="color:#aaa; font-size:0.85em;">${n.role || ''}</span>
+                        </div>
+                        <div style="color:#bbb; font-size:0.9em; margin-top:2px;">${n.status || ''}</div>
+                    </div>`).join('') : `<div style="color:#666; font-style:italic;">Пока никого не замечено</div>`}
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (setWaypointBtn) setWaypointBtn.disabled = !loc.id;
+    if (goToNpcBtn) goToNpcBtn.disabled = npcsHere.length === 0;
+}
+
+function openMapToLocation(locationId, locationName) {
+    const mapModal = document.getElementById('mapModal');
+    const detailsPanel = document.getElementById('mapDetailsPanel');
+    if (!mapModal) return;
+
+    mapModal.classList.remove('hidden');
+
+    let loc = null;
+    if (gameState && Array.isArray(gameState.worldMap)) {
+        if (locationId) {
+            loc = gameState.worldMap.find(l => l.id === locationId) || null;
+        }
+        if (!loc && locationName) {
+            const n = String(locationName).toLowerCase();
+            loc = gameState.worldMap.find(l => l.name && (l.name.toLowerCase() === n || l.name.toLowerCase().includes(n) || n.includes(l.name.toLowerCase()))) || null;
+        }
+    }
+
+    if (loc) {
+        selectedMapLocation = loc;
+        renderMapDetails(loc);
+        if (detailsPanel) detailsPanel.classList.remove('hidden');
+    }
+    drawMap();
 }
 
 function initModalHandlers() {
@@ -263,24 +430,51 @@ function drawMap() {
     if (!canvas || !gameState || !gameState.worldMap) return;
 
     const ctx = canvas.getContext('2d');
-    canvas.width = canvas.parentElement.clientWidth;
-    canvas.height = canvas.parentElement.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.parentElement.clientWidth;
+    const cssH = canvas.parentElement.clientHeight;
+    canvas.width = Math.max(1, Math.floor(cssW * dpr));
+    canvas.height = Math.max(1, Math.floor(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // draw in CSS pixels
 
-    const centerX = canvas.width / 2 + mapOffsetX;
-    const centerY = canvas.height / 2 + mapOffsetY;
+    const centerX = cssW / 2 + mapOffsetX;
+    const centerY = cssH / 2 + mapOffsetY;
 
     // Clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, cssW, cssH);
 
-    // Draw Grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-    ctx.lineWidth = 1;
-    const step = 30 * mapScale;
+    // Draw connections first (routes)
+    if (Array.isArray(gameState.worldEdges) && gameState.worldEdges.length > 0) {
+        ctx.lineWidth = Math.max(1, 2 * mapScale);
+        ctx.strokeStyle = 'rgba(200, 200, 200, 0.18)';
+        gameState.worldEdges.forEach(edge => {
+            const from = gameState.worldMap.find(l => l.id === edge.fromId);
+            const to = gameState.worldMap.find(l => l.id === edge.toId);
+            if (!from || !to) return;
+            const x1 = centerX + (from.x * 30 * mapScale);
+            const y1 = centerY + (from.y * 30 * mapScale);
+            const x2 = centerX + (to.x * 30 * mapScale);
+            const y2 = centerY + (to.y * 30 * mapScale);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        });
+    }
 
     // Draw locations
     gameState.worldMap.forEach(loc => {
         const x = centerX + (loc.x * 30 * mapScale);
         const y = centerY + (loc.y * 30 * mapScale);
+
+        // Selected ring
+        if (selectedMapLocation && selectedMapLocation.id && loc.id && selectedMapLocation.id === loc.id) {
+            ctx.strokeStyle = 'rgba(74, 144, 226, 0.9)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(x, y, 16 * mapScale, 0, Math.PI * 2);
+            ctx.stroke();
+        }
 
         // Draw Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -301,25 +495,10 @@ function drawMap() {
     let playerX = centerX;
     let playerY = centerY;
 
-    // Try to find player position based on current location name
-    if (gameState.location) {
-        // Simple search: does any map location name overlap with current location string?
-        const currentLocObj = gameState.worldMap.find(loc =>
-            gameState.location.toLowerCase().includes(loc.name.toLowerCase()) ||
-            loc.name.toLowerCase().includes(gameState.location.toLowerCase())
-        );
-
-        if (currentLocObj) {
-            playerX = centerX + (currentLocObj.x * 30 * mapScale);
-            playerY = centerY + (currentLocObj.y * 30 * mapScale);
-        } else {
-            // If not found, default to the last discovered location (most likely where we are)
-            const lastLoc = gameState.worldMap[gameState.worldMap.length - 1];
-            if (lastLoc) {
-                playerX = centerX + (lastLoc.x * 30 * mapScale);
-                playerY = centerY + (lastLoc.y * 30 * mapScale);
-            }
-        }
+    // Prefer explicit player position from server
+    if (gameState.playerPos && typeof gameState.playerPos.x === 'number' && typeof gameState.playerPos.y === 'number') {
+        playerX = centerX + (gameState.playerPos.x * 30 * mapScale);
+        playerY = centerY + (gameState.playerPos.y * 30 * mapScale);
     }
 
     ctx.fillStyle = '#ff4444';
@@ -342,6 +521,20 @@ function drawMap() {
     ctx.shadowBlur = 4;
     ctx.fillText("ВЫ", playerX, playerY - 15 * mapScale);
     ctx.shadowBlur = 0; // Reset shadow
+
+    // Waypoint marker
+    if (gameState.mapWaypoint && gameState.mapWaypoint.locationId) {
+        const wLoc = gameState.worldMap.find(l => l.id === gameState.mapWaypoint.locationId);
+        if (wLoc) {
+            const wx = centerX + (wLoc.x * 30 * mapScale);
+            const wy = centerY + (wLoc.y * 30 * mapScale);
+            ctx.fillStyle = '#ffd700';
+            ctx.font = `${22 * mapScale}px "Segoe UI Emoji", "Arial"`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('📌', wx + 18 * mapScale, wy - 18 * mapScale);
+        }
+    }
 
     // Draw Tooltip if hovering
     if (hoveredLocation) {
@@ -372,8 +565,12 @@ function drawMap() {
                     // Если есть отношения, покажем их
                     if (gameState.character.relationships && gameState.character.relationships[npcName]) {
                         const rel = gameState.character.relationships[npcName];
-                        // Обрезаем длинное описание отношений
-                        const shortRel = rel.length > 40 ? rel.substring(0, 40) + '...' : rel;
+                        const relStr = typeof rel === 'string'
+                            ? rel
+                            : (rel && typeof rel === 'object'
+                                ? [rel.role, rel.status, (typeof rel.disposition === 'number' ? `disp:${rel.disposition}` : '')].filter(Boolean).join(', ')
+                                : '');
+                        const shortRel = relStr.length > 40 ? relStr.substring(0, 40) + '...' : relStr;
                         tooltipLines.push(`   "${shortRel}"`);
                     }
                 });
@@ -438,7 +635,8 @@ function drawMap() {
     }
 
     // Update Coords UI
-    document.getElementById('mapCoordinates').textContent = `Scale: ${mapScale.toFixed(1)}x`;
+    const pos = gameState.playerPos ? `${gameState.playerPos.x}, ${gameState.playerPos.y}` : '?, ?';
+    document.getElementById('mapCoordinates').textContent = `Scale: ${mapScale.toFixed(1)}x • Вы: ${pos}`;
 }
 
 function handleMessage(data) {
@@ -484,6 +682,17 @@ function handleMessage(data) {
         updateUI();
         displayScene(currentScene, currentChoices);
         hideLoading();
+    } else if (data.type === 'clientUpdateAck') {
+        // Server accepted client-side state patch (e.g., waypoint)
+        if (data.gameState) {
+            gameState = data.gameState;
+            saveGameToLocalStorage();
+            updateUI();
+            // If map is open, refresh
+            if (!document.getElementById('mapModal')?.classList.contains('hidden')) {
+                drawMap();
+            }
+        }
     } else if (data.type === 'gameOver') {
         hideLoading();
         showGameOver(data);
@@ -810,85 +1019,27 @@ function updateCharacter() {
     const characterInfo = document.getElementById('characterInfo');
     if (!characterInfo) return;
 
-    // Формируем список знакомств и отношений
-    let relationshipsHTML = '';
-    const relationships = gameState.character.relationships || {};
-    const relationshipKeys = Object.keys(relationships);
-
-    if (relationshipKeys.length > 0) {
-        relationshipsHTML = `
-            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-                <h5 style="color: #4a90e2; margin-bottom: 10px; font-size: 1.1em;">👥 Знакомства и отношения:</h5>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-        `;
-
-        relationshipKeys.forEach(name => {
-            let relation = relationships[name];
-
-            // Parse if it's a JSON string
-            if (typeof relation === 'string' && relation.startsWith('{')) {
-                try {
-                    relation = JSON.parse(relation);
-                } catch (e) {
-                    // Keep as string if parsing fails
-                }
+    // Build NPC list (new system), fallback to legacy relationships
+    let npcList = Array.isArray(gameState.npcs) ? gameState.npcs : Object.values(gameState.npcs || {});
+    if (!npcList.length) {
+        const relationships = gameState.character?.relationships || {};
+        npcList = Object.keys(relationships).map(name => {
+            let rel = relationships[name];
+            if (typeof rel === 'string' && rel.startsWith('{')) {
+                try { rel = JSON.parse(rel); } catch { }
             }
-
-            // Handle both string and object formats
-            let statusText = '';
-            let roleText = '';
-            let dispositionColor = '#ccc';
-
-            if (typeof relation === 'object' && relation !== null) {
-                // Object format: {"status":"знакомый","role":"хозяин таверны","disposition":0}
-                const status = relation.status || 'знакомый';
-                const role = relation.role || '';
-                const disposition = relation.disposition || 0;
-
-                // Color based on disposition
-                if (disposition >= 50) {
-                    dispositionColor = '#4CAF50'; // Green
-                    statusText = `${status} (дружелюбен)`;
-                } else if (disposition >= 20) {
-                    dispositionColor = '#8BC34A'; // Light green
-                    statusText = `${status} (расположен)`;
-                } else if (disposition > -20) {
-                    dispositionColor = '#ccc'; // Neutral
-                    statusText = status;
-                } else if (disposition > -50) {
-                    dispositionColor = '#FF9800'; // Orange
-                    statusText = `${status} (недоволен)`;
-                } else {
-                    dispositionColor = '#f44336'; // Red
-                    statusText = `${status} (враждебен)`;
-                }
-
-                roleText = role;
-            } else {
-                // String format (old style)
-                statusText = String(relation);
-            }
-
-            relationshipsHTML += `
-                <div style="background: rgba(74, 144, 226, 0.1); padding: 10px; border-radius: 5px; border-left: 3px solid #4a90e2;">
-                    <strong style="color: #4a90e2;">${name}</strong>
-                    ${roleText ? `<span style="color: #888; font-size: 0.85em;"> — ${roleText}</span>` : ''}
-                    <p style="margin-top: 5px; color: ${dispositionColor}; font-size: 0.9em; line-height: 1.4;">${statusText}</p>
-                </div>
-            `;
+            const obj = (rel && typeof rel === 'object') ? rel : {};
+            const disposition = typeof obj.disposition === 'number' ? obj.disposition : 0;
+            const locName = gameState.character?.npcLocations?.[name] || '';
+            return {
+                name,
+                role: obj.role || '',
+                status: obj.status || (typeof rel === 'string' ? rel : ''),
+                disposition,
+                notes: obj.notes || '',
+                lastSeen: locName ? { locationName: locName, locationId: null, dayOfGame: gameState.date?.dayOfGame ?? null } : null
+            };
         });
-
-        relationshipsHTML += `
-                </div>
-            </div>
-        `;
-    } else {
-        relationshipsHTML = `
-            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
-                <h5 style="color: #4a90e2; margin-bottom: 10px; font-size: 1.1em;">👥 Знакомства и отношения:</h5>
-                <p style="color: #888; font-style: italic; font-size: 0.9em;">Пока никого не знаете</p>
-            </div>
-        `;
     }
 
     // Формируем список недавних событий (опционально)
@@ -925,10 +1076,105 @@ function updateCharacter() {
                 <strong style="color: #4a90e2;">Черты характера:</strong>
                 <p style="color: #ccc; margin-top: 5px; font-size: 0.9em;">${gameState.character.traits.join(', ')}</p>
             </div>
-            ${relationshipsHTML}
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+                    <h5 style="color: #4a90e2; margin: 0; font-size: 1.1em;">👥 Знакомства и отношения</h5>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input id="npcSearchInput" placeholder="Поиск..." style="width: 180px; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color:#fff;">
+                        <select id="npcSortSelect" style="padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); color:#fff;">
+                            <option value="dispositionDesc">По отношению</option>
+                            <option value="nameAsc">По имени</option>
+                            <option value="lastSeenDesc">По последней встрече</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="npcCardsWrap" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
             ${recentEventsHTML}
                 </div>
         `;
+
+    const wrap = characterInfo.querySelector('#npcCardsWrap');
+    const search = characterInfo.querySelector('#npcSearchInput');
+    const sortSel = characterInfo.querySelector('#npcSortSelect');
+
+    function renderNpcCards() {
+        if (!wrap) return;
+        const q = (search?.value || '').trim().toLowerCase();
+        const sortMode = sortSel?.value || 'dispositionDesc';
+
+        let rows = npcList.slice();
+        if (q) {
+            rows = rows.filter(n => (n.name || '').toLowerCase().includes(q) || (n.role || '').toLowerCase().includes(q) || (n.status || '').toLowerCase().includes(q));
+        }
+
+        rows.sort((a, b) => {
+            if (sortMode === 'nameAsc') return String(a.name).localeCompare(String(b.name), 'ru');
+            if (sortMode === 'lastSeenDesc') {
+                const ad = a.lastSeen?.dayOfGame ?? -1;
+                const bd = b.lastSeen?.dayOfGame ?? -1;
+                return bd - ad;
+            }
+            // dispositionDesc
+            return (b.disposition ?? 0) - (a.disposition ?? 0);
+        });
+
+        if (!rows.length) {
+            wrap.innerHTML = `<div style="color:#888; font-style:italic;">Пока никого не знаете</div>`;
+            return;
+        }
+
+        wrap.innerHTML = rows.map(n => {
+            const disp = typeof n.disposition === 'number' ? n.disposition : 0;
+            const pct = Math.max(0, Math.min(100, Math.round(((disp + 100) / 200) * 100)));
+            const barColor = disp >= 25 ? '#4CAF50' : (disp <= -25 ? '#f44336' : '#9e9e9e');
+            const last = n.lastSeen?.locationName ? `${n.lastSeen.locationName}${n.lastSeen.dayOfGame ? ` • день ${n.lastSeen.dayOfGame}` : ''}` : 'неизвестно';
+            const role = n.role ? `— ${n.role}` : '';
+            const status = n.status ? n.status : '';
+            const notes = n.notes ? n.notes : '';
+            const showMap = (n.lastSeen?.locationName || n.lastSeen?.locationId) ? '' : 'disabled';
+            const mapPayload = encodeURIComponent(JSON.stringify({ locationId: n.lastSeen?.locationId || null, locationName: n.lastSeen?.locationName || '' }));
+            return `
+                <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                        <div>
+                            <div style="color:#4a90e2; font-weight:700;">${n.name}</div>
+                            <div style="color:#888; font-size:0.9em;">${role}</div>
+                        </div>
+                        <button class="npc-map-btn" data-map="${mapPayload}" ${showMap} style="padding:6px 10px; border-radius: 8px; border: 1px solid rgba(74,144,226,0.35); background: rgba(74,144,226,0.12); color:#4a90e2; cursor:pointer; opacity:${showMap ? 0.45 : 1};">
+                            🗺️ На карте
+                        </button>
+                    </div>
+                    <div style="margin-top:8px; color:#ccc; font-size:0.95em;">${status}</div>
+                    ${notes ? `<div style="margin-top:6px; color:#aaa; font-size:0.9em; font-style:italic;">${notes}</div>` : ''}
+                    <div style="margin-top:10px;">
+                        <div style="display:flex; justify-content:space-between; color:#888; font-size:0.85em;">
+                            <span>Отношение: <strong style="color:${barColor};">${disp}</strong></span>
+                            <span>Видели: ${last}</span>
+                        </div>
+                        <div style="margin-top:6px; height:8px; background: rgba(0,0,0,0.5); border-radius: 999px; overflow:hidden; border: 1px solid rgba(255,255,255,0.08);">
+                            <div style="height:100%; width:${pct}%; background:${barColor};"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        wrap.querySelectorAll('.npc-map-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                try {
+                    const payload = JSON.parse(decodeURIComponent(btn.dataset.map));
+                    openMapToLocation(payload.locationId, payload.locationName);
+                } catch (e) {
+                    console.warn('Failed to open map for NPC', e);
+                }
+            });
+        });
+    }
+
+    if (search) search.addEventListener('input', renderNpcCards);
+    if (sortSel) sortSel.addEventListener('change', renderNpcCards);
+    renderNpcCards();
 }
 
 function updateSkills() {    // Навыки
@@ -1457,6 +1703,7 @@ function initSaveLoadHandlers() {
         });
     }
 }
+
 
 
 

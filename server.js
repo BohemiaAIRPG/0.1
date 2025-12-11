@@ -37,6 +37,118 @@ const gameSessions = new Map();
 const SAVES_DIR = join(process.cwd(), 'saves');
 const AI_ERROR_LOG = join(process.cwd(), 'ai_errors.log');
 
+function clamp(n, min, max) {
+    if (typeof n !== 'number' || Number.isNaN(n)) return min;
+    return Math.max(min, Math.min(max, n));
+}
+
+function stableIdFromName(name) {
+    const s = String(name || '').trim().toLowerCase();
+    if (!s) return 'loc_' + Math.random().toString(36).slice(2, 10);
+    // Simple stable-ish id (not cryptographic) to keep saves readable
+    return 'loc_' + s
+        .replace(/ё/g, 'е')
+        .replace(/[^a-z0-9а-я\s_-]/gi, '')
+        .replace(/\s+/g, '_')
+        .slice(0, 40);
+}
+
+function normalizeWorldMap(gameState) {
+    if (!Array.isArray(gameState.worldMap)) gameState.worldMap = [];
+    gameState.worldMap = gameState.worldMap
+        .filter(loc => loc && typeof loc === 'object' && loc.name)
+        .map(loc => ({
+            id: loc.id || stableIdFromName(loc.name),
+            name: String(loc.name),
+            x: typeof loc.x === 'number' ? loc.x : 0,
+            y: typeof loc.y === 'number' ? loc.y : 0,
+            description: loc.description ? String(loc.description) : '',
+            type: loc.type ? String(loc.type) : 'place',
+            discovered: loc.discovered !== false,
+            discoveredAtDay: typeof loc.discoveredAtDay === 'number' ? loc.discoveredAtDay : (gameState.date?.dayOfGame ?? 1),
+            visitedCount: typeof loc.visitedCount === 'number' ? loc.visitedCount : 0
+        }));
+
+    // De-duplicate by id (keep first)
+    const seen = new Set();
+    gameState.worldMap = gameState.worldMap.filter(loc => {
+        if (seen.has(loc.id)) return false;
+        seen.add(loc.id);
+        return true;
+    });
+
+    // If map is empty, create a starting anchor at (0,0)
+    if (gameState.worldMap.length === 0 && gameState.location) {
+        gameState.worldMap.push({
+            id: stableIdFromName(gameState.location),
+            name: gameState.location,
+            x: 0,
+            y: 0,
+            description: 'Текущее место',
+            type: 'area',
+            discovered: true,
+            discoveredAtDay: gameState.date?.dayOfGame ?? 1,
+            visitedCount: 1
+        });
+    }
+}
+
+function findLocationByName(gameState, name) {
+    if (!name) return null;
+    const n = String(name).trim().toLowerCase();
+    if (!n) return null;
+    // Prefer exact match; fallback to includes
+    let loc = gameState.worldMap.find(l => l.name && l.name.toLowerCase() === n);
+    if (loc) return loc;
+    loc = gameState.worldMap.find(l => n.includes(l.name.toLowerCase()) || l.name.toLowerCase().includes(n));
+    return loc || null;
+}
+
+function ensureGameStateIntegrity(gameState) {
+    if (!gameState || typeof gameState !== 'object') return;
+    if (!gameState.date) {
+        gameState.date = { day: 5, month: 6, year: 1403, dayOfGame: gameState.day || 1, hour: 9, timeOfDay: gameState.time || 'утро' };
+    }
+
+    normalizeWorldMap(gameState);
+
+    if (!gameState.playerPos || typeof gameState.playerPos !== 'object') {
+        const loc = findLocationByName(gameState, gameState.location) || gameState.worldMap[0] || null;
+        gameState.playerPos = {
+            x: loc ? loc.x : 0,
+            y: loc ? loc.y : 0,
+            locationId: loc ? loc.id : null
+        };
+    } else {
+        if (typeof gameState.playerPos.x !== 'number') gameState.playerPos.x = 0;
+        if (typeof gameState.playerPos.y !== 'number') gameState.playerPos.y = 0;
+        if (!('locationId' in gameState.playerPos)) gameState.playerPos.locationId = null;
+    }
+
+    if (!Array.isArray(gameState.worldEdges)) gameState.worldEdges = [];
+    gameState.worldEdges = gameState.worldEdges
+        .filter(e => e && typeof e === 'object' && e.fromId && e.toId)
+        .map(e => ({
+            fromId: String(e.fromId),
+            toId: String(e.toId),
+            kind: e.kind ? String(e.kind) : 'road',
+            discoveredAtDay: typeof e.discoveredAtDay === 'number' ? e.discoveredAtDay : (gameState.date?.dayOfGame ?? 1)
+        }));
+
+    if (!gameState.npcs || typeof gameState.npcs !== 'object') gameState.npcs = {};
+    if (!gameState.character) gameState.character = {};
+    if (!gameState.character.relationships || typeof gameState.character.relationships !== 'object') {
+        gameState.character.relationships = {};
+    }
+    if (!gameState.character.npcLocations || typeof gameState.character.npcLocations !== 'object') {
+        gameState.character.npcLocations = {};
+    }
+
+    if (!gameState.mapWaypoint || typeof gameState.mapWaypoint !== 'object') {
+        gameState.mapWaypoint = { locationId: null, name: '' };
+    }
+}
+
 // Создаем папку для сохранений, если её нет
 (async () => {
     try {
@@ -137,7 +249,7 @@ function createGameState(name, gender = 'male') {
     const genderText = gender === 'female' ? 'женщина' : 'мужчина';
     const genderPronoun = gender === 'female' ? 'она' : 'он';
 
-    return {
+    const gameState = {
         name,
         gender,
         location: 'Ратай, улица у рынка',
@@ -164,7 +276,10 @@ function createGameState(name, gender = 'male') {
             weapon: { name: 'нет', condition: 0 },
             armor: { name: 'нет', condition: 0 }
         },
-        worldMap: [], // Dynamic Map - starts empty
+        worldMap: [], // Dynamic Map (normalized in ensureGameStateIntegrity)
+        worldEdges: [], // Connections between locations (roads/paths)
+        playerPos: { x: 0, y: 0, locationId: null }, // Explicit player position on map
+        mapWaypoint: { locationId: null, name: '' }, // Optional marker for player
         inventory: [], // Полностью пустой инвентарь
         skills: {
             combat: { level: 0, xp: 0, maxLevel: 100, nextLevel: 100 },
@@ -209,8 +324,11 @@ function createGameState(name, gender = 'male') {
         },
         quests: [],
         history: [], // Полная история всех действий с датами
-        _lastRepIncreaseDay: null
+        _lastRepIncreaseDay: null,
+        npcs: {} // NPC registry: name -> {role,status,disposition,lastSeen,notes}
     };
+    ensureGameStateIntegrity(gameState);
+    return gameState;
 }
 
 async function generateWithAI(prompt) {
@@ -229,11 +347,11 @@ async function generateWithAI(prompt) {
                 messages: [
                     {
                         role: 'system',
-                        content: 'Ты мастер RPG-игр в стиле Kingdom Come: Deliverance. ⚠️ ОТВЕЧАЙ СТРОГО ТОЛЬКО ВАЛИДНЫМ JSON БЕЗ MARKDOWN БЛОКОВ! ⚠️ Формат: {"description": "...", "health": 0, "usedItems": [], "newItems": [], "skillXP": {}, "choices": []}. Все текстовые поля на русском.\n\n🔴 КРИТИЧЕСКИ ВАЖНО - ОБЯЗАТЕЛЬНЫЕ ПОЛЯ В КАЖДОМ ОТВЕТЕ:\n1) "usedItems" - ВСЕГДА массив (пустой [] если ничего не использовано)\n2) "newItems" - ВСЕГДА массив (пустой [] если ничего не получено)\n3) "skillXP" - ВСЕГДА объект (пустой {} если навыки не использовались)\n4) "choices" - ВСЕГДА массив из 3 вариантов\n\n📝 ОПИСАНИЕ: ДЕТАЛЬНОЕ и АТМОСФЕРНОЕ - МАКСИМУМ 130 СЛОВ! (4-6 предложений). ОБЯЗАТЕЛЬНО ДЕЛИ НА АБЗАЦЫ используя \\n\\n для разделения. Каждый абзац = отдельная мысль/сцена (2-3 предложения).\n\n📦 ИНВЕНТАРЬ (КРИТИЧЕСКИ ВАЖНО): Если игрок съел, выбросил, использовал, потерял или отдал предмет - ВСЕГДА указывай его в "usedItems". Это КРИТИЧЕСКИ ВАЖНО для игровой логики! Без этого игра сломается!\n\n⚔️ НАВЫКИ (КРИТИЧЕСКИ ВАЖНО): Если игрок успешно применил навык (бой, скрытность, красноречие, выживание) - ВСЕГДА указывай прирост опыта в "skillXP": {"combat": 15}. Это КРИТИЧЕСКИ ВАЖНО для прогрессии персонажа!\n\nСоздавай живое и захватывающее повествование с деталями окружения, действий персонажей, атмосферы и последствий выбора игрока. Используй короткие динамичные предложения для лучшей читаемости. ВСЕГДА используй обращение "вы/вас/ваш", НИКОГДА не упоминай имя персонажа в описании. НЕ упоминай навыки, уровни, репутацию в описании - только сюжет и атмосферу.'
+                        content: 'Ты мастер RPG-игр в стиле Kingdom Come: Deliverance.\n\n⚠️ ОТВЕЧАЙ СТРОГО ТОЛЬКО ВАЛИДНЫМ JSON БЕЗ MARKDOWN! Начинай СРАЗУ с { и заканчивай }.\nВсе текстовые поля на русском.\n\n🔴 ОБЯЗАТЕЛЬНЫЕ ПОЛЯ В КАЖДОМ ОТВЕТЕ:\n1) "usedItems" - ВСЕГДА массив (пустой [] если ничего не использовано)\n2) "newItems" - ВСЕГДА массив (пустой [] если ничего не получено)\n3) "skillXP" - ВСЕГДА объект (пустой {} если навыки не использовались)\n4) "choices" - ВСЕГДА массив из 3 вариантов\n\n🧮 ПРАВИЛО СТАТОВ (КРИТИЧЕСКИ ВАЖНО):\n- ВСЕ числовые поля (health/stamina/coins/reputation/morality/satiety/energy/timeChange) — это ДЕЛЬТЫ за этот ход.\n- По умолчанию ВСЕ ДЕЛЬТЫ = 0. НЕ меняй статы без прямой причины в сцене.\n- НЕ делай “случайных” правок и НЕ “балансируй” статы.\n- satiety/energy НЕ уменьшаются вручную “за время” — игра сама уменьшит их по timeChange.\n\n📝 ОПИСАНИЕ: детальное и атмосферное, максимум 130 слов (4-6 предложений). ДЕЛИ НА АБЗАЦЫ через \\n\\n.\n\n📦 ИНВЕНТАРЬ: если игрок съел/использовал/потерял/отдал предмет — ВСЕГДА укажи его в usedItems.\n\n⚔️ НАВЫКИ: если игрок применил навык — ВСЕГДА укажи прирост в skillXP (например {"speech": 15}).\n\nПовествование: реализм, последствия. Всегда “вы/вас/ваш”. Имя героя в описании не упоминай. Навыки/уровни/репутацию в описании не упоминай.'
                     },
                     { role: 'user', content: prompt }
                 ],
-                temperature: 0.8,
+                temperature: 0.6,
                 max_tokens: 2000
             }),
             signal: controller.signal
@@ -373,7 +491,18 @@ function buildHistoryContext(gameState) {
 }
 
 function buildPrompt(gameState, playerChoice, previousScene) {
+    ensureGameStateIntegrity(gameState);
     const historyContext = buildHistoryContext(gameState);
+    const knownNpcs = Object.values(gameState.npcs || {}).slice(-25);
+    const knownNpcsText = knownNpcs.length
+        ? knownNpcs.map(n => {
+            const disp = typeof n.disposition === 'number' ? n.disposition : 0;
+            const last = n.lastSeen && n.lastSeen.locationName ? `последний раз: ${n.lastSeen.locationName}` : 'последний раз: неизвестно';
+            const role = n.role ? `роль: ${n.role}` : 'роль: ?';
+            const status = n.status ? `статус: ${n.status}` : 'статус: ?';
+            return `- ${n.name}: ${role}, ${status}, отношение(disposition): ${disp}, ${last}`;
+        }).join('\n')
+        : 'Пока никого не знаете.';
 
     return `⚠️⚠️⚠️ ОТВЕЧАЙ СТРОГО ТОЛЬКО ВАЛИДНЫМ JSON! БЕЗ markdown, текста, комментариев, объяснений или подписи. Начинай СРАЗУ с { и заканчивай } ⚠️⚠️⚠️
 
@@ -389,6 +518,8 @@ function buildPrompt(gameState, playerChoice, previousScene) {
 ХАРАКТЕРИСТИКИ:
 - Здоровье: ${gameState.health}/${gameState.maxHealth}
 - Выносливость: ${gameState.stamina}/${gameState.maxStamina}
+- Сытость: ${gameState.satiety ?? 100}/100
+- Энергия: ${gameState.energy ?? 100}/100
 - Гроши: ${gameState.coins} (для справки, возвращай ИЗМЕНЕНИЕ!)
 - Репутация: ${gameState.reputation}/100
 - Мораль: ${gameState.morality}/100
@@ -410,7 +541,8 @@ ${gameState.character.background}
 ${historyContext}
 
 ═══ ОТНОШЕНИЯ И ЗНАКОМСТВА ═══
-${Object.entries(gameState.character.relationships).map(([name, desc]) => `- ${name}: ${desc}`).join('\n') || 'Пока никого не знаете.'}
+Известные NPC (структурировано):
+${knownNpcsText}
 
 ═══ АКТИВНЫЕ ЗАДАЧИ (КВЕСТЫ) ═══
 ${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})`).join('\n') || 'Нет активных задач.'}
@@ -420,7 +552,12 @@ ${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})
 
 ═══ КАРТА И ЛОКАЦИИ (FOG OF WAR) ═══
 Известные места:
-${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`).join('\n')}
+${(gameState.worldMap || []).map(loc => `- ${loc.name} [${loc.id}] (X:${loc.x}, Y:${loc.y})`).join('\n')}
+
+Позиция игрока: X:${gameState.playerPos?.x ?? 0}, Y:${gameState.playerPos?.y ?? 0}, locationId:${gameState.playerPos?.locationId ?? 'null'}
+
+Известные дороги/пути (worldEdges):
+${(gameState.worldEdges || []).slice(-30).map(e => `- ${e.fromId} <-> ${e.toId} (${e.kind})`).join('\n') || 'Пока нет известных связей.'}
 
 ВАЖНО: Если игрок открывает НОВУЮ значимую локацию (город, деревня, лагерь, пещера), добавь "newLocation".
 Координаты относительные: 0,0 - старт. Смести на 5-15 единиц в логичную сторону.
@@ -492,10 +629,20 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
    - ✅ МОЖНО: "satiety": 10 (это добавит +10), "satiety": -5 (это отнимет 5)
    - "Съел яблоко" -> "satiety": 10
    - "Поспал" -> "energy": 40, "stamina": 30
-   - timeChange АВТОМАТИЧЕСКИ их снижает. НЕ снижай их вручную за время.
+   - timeChange АВТОМАТИЧЕСКИ их снижает. НЕ снижай satiety/energy вручную за время.
 4. СМЫСЛ ШКАЛ (Для понимания контекста):
    - satiety: 100 = СЫТ (Отлично), 0 = ГОЛОД (Смерть).
    - energy: 100 = БОДР (Отлично), 0 = ИСТОЩЕН (Обморок).
+
+═══ ПРАВИЛА ИЗМЕНЕНИЯ СТАТОВ (Стабильность, без “скачков”) ═══
+ВАЖНО: Все числовые поля в ответе — это ДЕЛЬТЫ за этот ход. По умолчанию ставь 0.
+Меняй статы ТОЛЬКО если в сцене есть ПРЯМАЯ причина. Не делай “случайные” корректировки.
+Ограничения по здравому смыслу (обычно, если нет почти-смерти/подвига):
+- health: обычно 0. Урон только при травме/бою/падении/болезни. Лечение только при сне/еде/зелье/перевязке. Обычно |delta| ≤ 15.
+- stamina: трата только при физическом усилии/беге/бою; восстановление при отдыхе/сне. Обычно |delta| ≤ 20.
+- satiety: увеличивай ТОЛЬКО если игрок реально поел/выпил (и это есть в usedItems). НЕ уменьшай вручную.
+- energy: увеличивай ТОЛЬКО при сне/отдыхе (timeChange >= 1). НЕ уменьшай вручную.
+- reputation/morality: обычно 0. Меняй только за заметный поступок (и не каждый ход). Обычно |delta| ≤ 2.
 
 ⚠️ ИНВЕНТАРЬ newItems:
 - КАЖДЫЙ предмет ОТДЕЛЬНО! НЕ "Штаны и рубаха", а [{name:"Штаны"}, {name:"Рубаха"}]
@@ -507,7 +654,8 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
    ⚠️ ВАЖНО: При входе в НОВОЕ здание (таверна, кузница, и т.п.) - ОБЯЗАТЕЛЬНО добавь newLocation!
 8. NPC: Если встретил NPC или узнал где он -> npcLocation: {name: "Имя", location: "Название локации"}.
 9. ОТНОШЕНИЯ: При знакомстве с NPC добавь в characterUpdate.relationships: 
-   {"Имя": {"status": "знакомый", "role": "Кто он (хозяин таверны/кузнец/и т.п.)", "disposition": 0}}
+   {"Имя": {"status": "знакомый/приятель/враг/стража", "role": "кто он (хозяин таверны/кузнец/и т.п.)", "disposition": 0, "notes": "коротко: за что запомнился"}}
+   ⚠️ disposition — это целое от -100 (вражда) до +100 (полная лояльность). Меняй его редко и обоснованно.
 
 ═══ ФОРМАТ ОТВЕТА (ТОЛЬКО JSON) ═══
 {
@@ -518,6 +666,8 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
   "reputation": 0,
   "morality": 0,
   "timeChange": 0,
+  "satiety": 0,
+  "energy": 0,
   "locationChange": "",
   "isDialogue": false,
   "speakerName": "",
@@ -543,9 +693,10 @@ ${(gameState.worldMap || []).map(loc => `- ${loc.name} (X:${loc.x}, Y:${loc.y})`
 4. Навыки: XP за применение?
 5. Монеты: дельта (+/-)?
 6. Репутация: ЧИСЛО (дельта). □ Ничего заметного? → 0. □ Высокая репутация (70+) → максимум +1? Учтена история?
-7. Инвентарь: usedItems с повторами для количества?
-8. Смерть: gameOver только при реальной смерти?
-9. Диалог: правильные реплики если isDialogue?
+7. Выживание: satiety/energy менял только за еду/сон? satiety/energy НЕ уменьшал вручную “за время”?
+8. Инвентарь: usedItems с повторами для количества?
+9. Смерть: gameOver только при реальной смерти?
+10. Диалог: правильные реплики если isDialogue?
 
 Исправь ошибки перед отправкой! ОТВЕЧАЙ ТОЛЬКО ЧИСТЫМ JSON БЕЗ ТЕКСТА ВНЕ { }!`;
 }
@@ -755,6 +906,7 @@ function updateTime(gameState, hoursToAdd) {
 }
 
 function applyChanges(gameState, parsed) {
+    ensureGameStateIntegrity(gameState);
     // Обновляем время
     if (parsed.timeChange !== undefined && parsed.timeChange !== null) {
         updateTime(gameState, parsed.timeChange);
@@ -765,6 +917,33 @@ function applyChanges(gameState, parsed) {
         const oldLocation = gameState.location;
         gameState.location = parsed.locationChange;
         console.log(`📍 Локация изменена: ${oldLocation} → ${gameState.location}`);
+
+        // Move player marker to known map location if possible
+        const loc = findLocationByName(gameState, gameState.location);
+        if (loc) {
+            gameState.playerPos.x = loc.x;
+            gameState.playerPos.y = loc.y;
+            gameState.playerPos.locationId = loc.id;
+            loc.visitedCount = (loc.visitedCount || 0) + 1;
+        } else {
+            // Create placeholder at current coords (keeps map stable instead of "jumping" by string heuristics)
+            const id = stableIdFromName(gameState.location);
+            const exists = gameState.worldMap.find(l => l.id === id);
+            if (!exists) {
+                gameState.worldMap.push({
+                    id,
+                    name: gameState.location,
+                    x: gameState.playerPos.x,
+                    y: gameState.playerPos.y,
+                    description: 'Место отмечено по названию (без координат от AI)',
+                    type: 'area',
+                    discovered: true,
+                    discoveredAtDay: gameState.date?.dayOfGame ?? 1,
+                    visitedCount: 1
+                });
+            }
+            gameState.playerPos.locationId = id;
+        }
     }
 
     // Применяем изменения характеристик
@@ -891,12 +1070,40 @@ function applyChanges(gameState, parsed) {
         }
 
         if (parsed.characterUpdate.relationships) {
-            Object.entries(parsed.characterUpdate.relationships).forEach(([name, description]) => {
-                // Защита от [object Object] — если AI вернул объект вместо строки
-                const descStr = typeof description === 'string'
-                    ? description
-                    : JSON.stringify(description);
-                gameState.character.relationships[name] = descStr;
+            Object.entries(parsed.characterUpdate.relationships).forEach(([name, rel]) => {
+                const npcName = String(name || '').trim();
+                if (!npcName) return;
+
+                // Store as-is (string or object) — client can render both
+                gameState.character.relationships[npcName] = rel;
+
+                // Normalize into NPC registry
+                if (!gameState.npcs) gameState.npcs = {};
+                const npc = gameState.npcs[npcName] || { name: npcName, disposition: 0 };
+                npc.name = npcName;
+
+                if (typeof rel === 'string') {
+                    npc.notes = rel;
+                } else if (rel && typeof rel === 'object') {
+                    if (rel.role && typeof rel.role === 'string') npc.role = rel.role;
+                    if (rel.status && typeof rel.status === 'string') npc.status = rel.status;
+                    if (rel.notes && typeof rel.notes === 'string') npc.notes = rel.notes;
+                    if (typeof rel.disposition === 'number' && !Number.isNaN(rel.disposition)) {
+                        npc.disposition = clamp(Math.round(rel.disposition), -100, 100);
+                    }
+                }
+
+                // Ensure lastSeen if we have npcLocations
+                const locName = gameState.character.npcLocations?.[npcName];
+                if (locName) {
+                    const locObj = findLocationByName(gameState, locName);
+                    npc.lastSeen = {
+                        dayOfGame: gameState.date?.dayOfGame ?? null,
+                        locationId: locObj ? locObj.id : null,
+                        locationName: locName
+                    };
+                }
+                gameState.npcs[npcName] = npc;
             });
         }
 
@@ -933,16 +1140,38 @@ function applyChanges(gameState, parsed) {
     // Обновляем Карту (Fog of War)
     if (parsed.newLocation && parsed.newLocation.name) {
         if (!gameState.worldMap) gameState.worldMap = [];
-        const exists = gameState.worldMap.find(loc => loc.name === parsed.newLocation.name);
+        const newLocId = parsed.newLocation.id || stableIdFromName(parsed.newLocation.name);
+        const exists = gameState.worldMap.find(loc => loc.id === newLocId || loc.name === parsed.newLocation.name);
         if (!exists) {
+            const fromId = gameState.playerPos?.locationId || (findLocationByName(gameState, gameState.location)?.id ?? null);
             gameState.worldMap.push({
+                id: newLocId,
                 name: parsed.newLocation.name,
                 x: parsed.newLocation.x || 0,
                 y: parsed.newLocation.y || 0,
                 description: parsed.newLocation.description,
-                discovered: true
+                type: parsed.newLocation.type || 'place',
+                discovered: true,
+                discoveredAtDay: gameState.date?.dayOfGame ?? 1,
+                visitedCount: 0
             });
             console.log(`🗺️ Новая локация открыта: "${parsed.newLocation.name}"`);
+
+            // Auto-connect new location to current one
+            if (fromId && fromId !== newLocId) {
+                if (!Array.isArray(gameState.worldEdges)) gameState.worldEdges = [];
+                const already = gameState.worldEdges.find(e =>
+                    (e.fromId === fromId && e.toId === newLocId) || (e.fromId === newLocId && e.toId === fromId)
+                );
+                if (!already) {
+                    gameState.worldEdges.push({
+                        fromId,
+                        toId: newLocId,
+                        kind: 'path',
+                        discoveredAtDay: gameState.date?.dayOfGame ?? 1
+                    });
+                }
+            }
         }
     }
 
@@ -952,6 +1181,21 @@ function applyChanges(gameState, parsed) {
 
         gameState.character.npcLocations[parsed.npcLocation.name] = parsed.npcLocation.location;
         console.log(`👤 NPC ${parsed.npcLocation.name} замечен в локации "${parsed.npcLocation.location}"`);
+
+        // Update NPC registry for map/relations UI
+        if (!gameState.npcs) gameState.npcs = {};
+        const npcName = String(parsed.npcLocation.name).trim();
+        if (npcName) {
+            const locObj = findLocationByName(gameState, parsed.npcLocation.location);
+            const npc = gameState.npcs[npcName] || { name: npcName, disposition: 0 };
+            npc.name = npcName;
+            npc.lastSeen = {
+                dayOfGame: gameState.date?.dayOfGame ?? null,
+                locationId: locObj ? locObj.id : null,
+                locationName: parsed.npcLocation.location
+            };
+            gameState.npcs[npcName] = npc;
+        }
     }
 
     // Обновляем инвентарь (Использованные предметы)
@@ -1165,6 +1409,9 @@ wss.on('connection', (ws) => {
                     loadedGameState.energy = 55;
                 }
 
+                // 🧭 PATCH: Fix old saves missing map/NPC systems
+                ensureGameStateIntegrity(loadedGameState);
+
                 gameSessions.set(sessionId, loadedGameState);
 
                 if (!loadedGameState.name) {
@@ -1325,6 +1572,25 @@ wss.on('connection', (ws) => {
                     isDialogue: parsed.isDialogue || false,
                     speakerName: parsed.speakerName || ''
                 }));
+            } else if (data.type === 'clientUpdate') {
+                // Client-side UX updates that should persist (waypoint, UI prefs, etc.)
+                const gameState = gameSessions.get(sessionId);
+                if (!gameState) {
+                    ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+                    return;
+                }
+                ensureGameStateIntegrity(gameState);
+
+                const patch = data.patch && typeof data.patch === 'object' ? data.patch : {};
+
+                // Allowlist fields
+                if (patch.mapWaypoint && typeof patch.mapWaypoint === 'object') {
+                    const locationId = patch.mapWaypoint.locationId ? String(patch.mapWaypoint.locationId) : null;
+                    const name = patch.mapWaypoint.name ? String(patch.mapWaypoint.name) : '';
+                    gameState.mapWaypoint = { locationId, name };
+                }
+
+                ws.send(JSON.stringify({ type: 'clientUpdateAck', gameState }));
             } else if (data.type === 'save') {
                 const gameState = gameSessions.get(sessionId);
                 if (!gameState) {
@@ -1387,6 +1653,7 @@ httpServer.listen(PORT, () => {
     console.log(`📡 Server running on http://localhost:${PORT}`);
     console.log(`🌐 Open http://localhost:${PORT} in your browser`);
 });
+
 
 
 

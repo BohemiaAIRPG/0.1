@@ -189,18 +189,32 @@
 
         <!-- Модальное окно карты -->
         <div id="mapModal" class="modal hidden" style="align-items: center; justify-content: center;">
-            <div class="modal-content" style="max-width: 900px; height: 80vh; display: flex; flex-direction: column;">
+            <div class="modal-content" style="max-width: 1000px; height: 80vh; display: flex; flex-direction: column;">
                 <div class="modal-header">
                     <h3>🗺️ Ратае и окрестности</h3>
                     <button class="modal-close" id="closeMapModal">&times;</button>
                 </div>
-                <div class="modal-body"
-                    style="padding: 0; flex: 1; background: #1a1a1a; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative;">
-                    <canvas id="worldMapCanvas"
-                        style="background: url('https://www.transparenttextures.com/patterns/aged-paper.png'), #2c2c2c; box-shadow: inset 0 0 50px rgba(0,0,0,0.8);"></canvas>
-                    <div id="mapCoordinates"
-                        style="position: absolute; bottom: 10px; right: 10px; color: #888; font-family: monospace; background: rgba(0,0,0,0.5); padding: 5px;">
-                        0, 0</div>
+                <div class="modal-body map-modal-body">
+                    <div class="map-canvas-wrap">
+                        <canvas id="worldMapCanvas" class="world-map-canvas"></canvas>
+                        <div id="mapCoordinates" class="map-coordinates">0, 0</div>
+                    </div>
+                    <div id="mapDetailsPanel" class="map-details-panel hidden">
+                        <div class="map-details-header">
+                            <div>
+                                <div class="map-details-title" id="mapDetailsTitle">Выберите локацию</div>
+                                <div class="map-details-subtitle" id="mapDetailsSubtitle">Кликните по метке на карте</div>
+                            </div>
+                            <button class="map-details-close" id="closeMapDetailsBtn">&times;</button>
+                        </div>
+                        <div class="map-details-body" id="mapDetailsBody">
+                            <div class="map-details-empty">Нет выбранной локации</div>
+                        </div>
+                        <div class="map-details-footer">
+                            <button class="map-details-btn" id="mapSetWaypointBtn" disabled>📌 Поставить метку</button>
+                            <button class="map-details-btn secondary" id="mapGoToNpcBtn" disabled>👤 Показать NPC</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-footer"
                     style="padding: 15px; background: rgba(255,255,255,0.03); text-align: center; color: #888; font-size: 0.9em;">
