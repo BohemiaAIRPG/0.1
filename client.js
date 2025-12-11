@@ -3,6 +3,8 @@ let gameState = null;
 let currentScene = '';
 let currentChoices = [];
 let currentSessionId = null;
+let lastEffects = [];
+let lastCheckResult = null;
 
 // === GLOBAL ERROR HANDLERS ===
 // Catch any unhandled errors and log them instead of crashing
@@ -279,6 +281,9 @@ function renderMapDetails(loc) {
         .map(id => (gameState.worldMap || []).find(l => l.id === id))
         .filter(Boolean);
 
+    const route = computeRoute(gameState, gameState.playerPos?.locationId, loc.id);
+    const routeHtml = route ? renderRouteSummary(gameState, route) : `<div style="color:#666; font-style:italic;">Маршрут неизвестен (нет связей)</div>`;
+
     const npcsHere = [];
     if (gameState && gameState.npcs) {
         Object.values(gameState.npcs).forEach(n => {
@@ -292,9 +297,16 @@ function renderMapDetails(loc) {
         });
     }
 
+    const factionLine = (n) => n.faction ? `<span style="color:#ffd700;">${n.faction}</span>` : '';
+    const dispLine = (n) => (typeof n.disposition === 'number') ? ` • disp: <span style="color:${n.disposition >= 25 ? '#8BC34A' : (n.disposition <= -25 ? '#FF9800' : '#9e9e9e')}; font-weight:700;">${n.disposition}</span>` : '';
+
     body.innerHTML = `
         <div style="color:#ccc; line-height:1.5;">
             <div style="margin-bottom:10px; color:#888; font-size:0.9em;">${loc.description ? loc.description : 'Описание отсутствует.'}</div>
+            <div style="margin-bottom:12px;">
+                <strong style="color:#4a90e2;">Маршрут</strong>
+                <div style="margin-top:6px;">${routeHtml}</div>
+            </div>
             <div style="margin-bottom:12px;">
                 <strong style="color:#4a90e2;">Связи</strong>
                 <div style="margin-top:6px; display:flex; flex-direction:column; gap:6px;">
@@ -310,6 +322,7 @@ function renderMapDetails(loc) {
                             <span style="color:#aaa; font-size:0.85em;">${n.role || ''}</span>
                         </div>
                         <div style="color:#bbb; font-size:0.9em; margin-top:2px;">${n.status || ''}</div>
+                        <div style="color:#888; font-size:0.85em; margin-top:2px;">${factionLine(n)}${dispLine(n)}</div>
                     </div>`).join('') : `<div style="color:#666; font-style:italic;">Пока никого не замечено</div>`}
                 </div>
             </div>
@@ -344,6 +357,95 @@ function openMapToLocation(locationId, locationName) {
         if (detailsPanel) detailsPanel.classList.remove('hidden');
     }
     drawMap();
+}
+
+function edgeCost(kind) {
+    const k = String(kind || 'path').toLowerCase();
+    if (k.includes('road') || k.includes('дорог')) return 1.0;
+    if (k.includes('path') || k.includes('троп')) return 1.2;
+    if (k.includes('forest') || k.includes('лес')) return 1.6;
+    if (k.includes('river') || k.includes('река')) return 2.0;
+    if (k.includes('mount') || k.includes('перев')) return 2.2;
+    return 1.2;
+}
+
+function computeRoute(state, fromId, toId) {
+    if (!state || !Array.isArray(state.worldEdges) || !Array.isArray(state.worldMap)) return null;
+    if (!fromId || !toId || fromId === toId) return null;
+
+    const nodes = new Set(state.worldMap.map(l => l.id).filter(Boolean));
+    if (!nodes.has(fromId) || !nodes.has(toId)) return null;
+
+    const adj = new Map();
+    state.worldEdges.forEach(e => {
+        if (!e || !e.fromId || !e.toId) return;
+        if (!adj.has(e.fromId)) adj.set(e.fromId, []);
+        if (!adj.has(e.toId)) adj.set(e.toId, []);
+        const cost = edgeCost(e.kind);
+        adj.get(e.fromId).push({ to: e.toId, cost, kind: e.kind });
+        adj.get(e.toId).push({ to: e.fromId, cost, kind: e.kind });
+    });
+
+    const dist = new Map();
+    const prev = new Map();
+    const visited = new Set();
+
+    nodes.forEach(id => dist.set(id, Infinity));
+    dist.set(fromId, 0);
+
+    // Simple Dijkstra without heap (maps are small)
+    while (true) {
+        let u = null;
+        let best = Infinity;
+        for (const [id, d] of dist.entries()) {
+            if (visited.has(id)) continue;
+            if (d < best) { best = d; u = id; }
+        }
+        if (u === null) break;
+        if (u === toId) break;
+        visited.add(u);
+        const neighbors = adj.get(u) || [];
+        neighbors.forEach(n => {
+            const alt = best + n.cost;
+            if (alt < (dist.get(n.to) ?? Infinity)) {
+                dist.set(n.to, alt);
+                prev.set(n.to, { from: u, kind: n.kind, cost: n.cost });
+            }
+        });
+    }
+
+    if (!prev.has(toId)) return null;
+    const pathIds = [toId];
+    let cur = toId;
+    const legs = [];
+    while (cur !== fromId) {
+        const p = prev.get(cur);
+        if (!p) break;
+        legs.push({ from: p.from, to: cur, kind: p.kind, cost: p.cost });
+        cur = p.from;
+        pathIds.push(cur);
+    }
+    pathIds.reverse();
+    legs.reverse();
+    return { fromId, toId, pathIds, legs, totalCost: dist.get(toId) };
+}
+
+function renderRouteSummary(state, route) {
+    const names = route.pathIds.map(id => (state.worldMap.find(l => l.id === id)?.name || id));
+    const hours = Math.max(1, Math.ceil((route.totalCost || 0) * 1.0));
+    const staminaCost = Math.ceil((route.totalCost || 0) * 6);
+    const kindHint = route.legs.map(l => l.kind || 'path').slice(0, 3).join(', ');
+
+    return `
+        <div style="background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px;">
+            <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:6px;">
+                <span style="color:#ccc;">Путь: ${names.join(' → ')}</span>
+            </div>
+            <div style="color:#888; font-size:0.9em;">
+                Оценка: ~${hours} ч • Выносливость: -${staminaCost}${kindHint ? ` • Типы: ${kindHint}` : ''}
+            </div>
+        </div>
+    `;
 }
 
 function initModalHandlers() {
@@ -656,13 +758,15 @@ function handleMessage(data) {
         gameState = data.gameState;
         currentScene = data.description;
         currentChoices = data.choices;
+        lastEffects = Array.isArray(data.effects) ? data.effects : [];
+        lastCheckResult = data.checkResult || null;
 
         console.log('📊 About to call updateUI and displayScene...');
         saveGameToLocalStorage();
         updateUI();
         console.log('✅ updateUI completed');
 
-        displayScene(currentScene, currentChoices, data.isDialogue, data.speakerName);
+        displayScene(currentScene, currentChoices, data.isDialogue, data.speakerName, lastEffects, lastCheckResult);
         console.log('✅ displayScene completed');
 
         hideLoading();
@@ -674,13 +778,15 @@ function handleMessage(data) {
         gameState = data.gameState;
         currentScene = data.description;
         currentChoices = data.choices;
+        lastEffects = [];
+        lastCheckResult = null;
 
         console.log('✅ Сохранение успешно загружено и восстановлено!');
         console.log(`🔗 SessionID обновлен: ${currentSessionId}`);
 
         saveGameToLocalStorage();
         updateUI();
-        displayScene(currentScene, currentChoices);
+        displayScene(currentScene, currentChoices, false, '', lastEffects, lastCheckResult);
         hideLoading();
     } else if (data.type === 'clientUpdateAck') {
         // Server accepted client-side state patch (e.g., waypoint)
@@ -847,7 +953,7 @@ function showWorldReacting() {
     `;
 }
 
-function displayScene(description, choices, isDialogue = false, speakerName = '') {
+function displayScene(description, choices, isDialogue = false, speakerName = '', effects = [], checkResult = null) {
     try {
         console.log('🎬 Rendering scene:', { descriptionLength: description?.length, choicesCount: choices?.length });
 
@@ -891,6 +997,55 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
                         <span class="dialogue-name">${speakerName}</span>
                     </div>
                     <div class="dialogue-line"></div>
+                </div>
+            `;
+        }
+
+        // Deterministic check (if any)
+        if (checkResult && typeof checkResult === 'object' && checkResult.key) {
+            const status = checkResult.success ? 'УСПЕХ' : 'ПРОВАЛ';
+            htmlContent += `
+                <div style="margin-bottom: 10px; padding: 10px 12px; background: rgba(74,144,226,0.08); border: 1px solid rgba(74,144,226,0.25); border-radius: 12px;">
+                    <div style="display:flex; justify-content:space-between; gap:10px;">
+                        <span style="color:#4a90e2; font-weight:700;">🎲 Проверка: ${checkResult.key}</span>
+                        <span style="color:${checkResult.success ? '#8BC34A' : '#FF9800'}; font-weight:800;">${status}</span>
+                    </div>
+                    <div style="margin-top:4px; color:#888; font-size:0.9em;">
+                        Сложность: ${checkResult.difficulty} • Шанс: ${checkResult.chance}% • Бросок: ${checkResult.roll}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Effects log (compact)
+        const eff = Array.isArray(effects) ? effects : [];
+        const nonZero = eff.filter(e => e && typeof e === 'object' && typeof e.delta === 'number' && e.delta !== 0 && e.stat);
+        if (nonZero.length) {
+            const rows = nonZero.slice(0, 8).map(e => {
+                const sign = e.delta > 0 ? '+' : '';
+                const statLabel = ({
+                    health: 'Здоровье',
+                    stamina: 'Выносливость',
+                    coins: 'Гроши',
+                    reputation: 'Репутация',
+                    morality: 'Мораль',
+                    satiety: 'Сытость',
+                    energy: 'Бодрость',
+                    timeChange: 'Время'
+                })[e.stat] || e.stat;
+                const reason = e.reason ? ` — ${e.reason}` : '';
+                return `<div style="display:flex; justify-content:space-between; gap:10px; padding:6px 10px; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
+                    <span style="color:#cfcfcf;">${statLabel}${reason}</span>
+                    <span style="color:${e.delta >= 0 ? '#8BC34A' : '#FF9800'}; font-weight:700;">${sign}${e.delta}</span>
+                </div>`;
+            }).join('');
+
+            htmlContent += `
+                <div style="margin-bottom: 14px;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                        <div style="color:#888; font-size:0.9em;">Последствия хода</div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:8px;">${rows}</div>
                 </div>
             `;
         }
@@ -1090,6 +1245,14 @@ function updateCharacter() {
                 </div>
                 <div id="npcCardsWrap" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div style="margin-top: 16px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 1.05em;">💰 Долги и обещания</h5>
+                <div id="debtsWrap" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
+            <div style="margin-top: 16px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                <h5 style="color: #ffd700; margin-bottom: 10px; font-size: 1.05em;">🏳️ Фракции</h5>
+                <div id="factionsWrap" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
             ${recentEventsHTML}
                 </div>
         `;
@@ -1130,8 +1293,10 @@ function updateCharacter() {
             const barColor = disp >= 25 ? '#4CAF50' : (disp <= -25 ? '#f44336' : '#9e9e9e');
             const last = n.lastSeen?.locationName ? `${n.lastSeen.locationName}${n.lastSeen.dayOfGame ? ` • день ${n.lastSeen.dayOfGame}` : ''}` : 'неизвестно';
             const role = n.role ? `— ${n.role}` : '';
+            const faction = n.faction ? String(n.faction) : '';
             const status = n.status ? n.status : '';
             const notes = n.notes ? n.notes : '';
+            const memory = Array.isArray(n.memory) ? n.memory.slice(-3) : [];
             const showMap = (n.lastSeen?.locationName || n.lastSeen?.locationId) ? '' : 'disabled';
             const mapPayload = encodeURIComponent(JSON.stringify({ locationId: n.lastSeen?.locationId || null, locationName: n.lastSeen?.locationName || '' }));
             return `
@@ -1139,7 +1304,7 @@ function updateCharacter() {
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
                         <div>
                             <div style="color:#4a90e2; font-weight:700;">${n.name}</div>
-                            <div style="color:#888; font-size:0.9em;">${role}</div>
+                            <div style="color:#888; font-size:0.9em;">${role}${faction ? ` • <span style="color:#ffd700;">${faction}</span>` : ''}</div>
                         </div>
                         <button class="npc-map-btn" data-map="${mapPayload}" ${showMap} style="padding:6px 10px; border-radius: 8px; border: 1px solid rgba(74,144,226,0.35); background: rgba(74,144,226,0.12); color:#4a90e2; cursor:pointer; opacity:${showMap ? 0.45 : 1};">
                             🗺️ На карте
@@ -1147,6 +1312,7 @@ function updateCharacter() {
                     </div>
                     <div style="margin-top:8px; color:#ccc; font-size:0.95em;">${status}</div>
                     ${notes ? `<div style="margin-top:6px; color:#aaa; font-size:0.9em; font-style:italic;">${notes}</div>` : ''}
+                    ${memory.length ? `<div style="margin-top:8px; color:#bbb; font-size:0.88em;"><span style="color:#888;">Память:</span> ${memory.map(m => `<span style="display:inline-block; margin:4px 6px 0 0; padding:2px 8px; border-radius:999px; background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);">${m}</span>`).join('')}</div>` : ''}
                     <div style="margin-top:10px;">
                         <div style="display:flex; justify-content:space-between; color:#888; font-size:0.85em;">
                             <span>Отношение: <strong style="color:${barColor};">${disp}</strong></span>
@@ -1175,6 +1341,55 @@ function updateCharacter() {
     if (search) search.addEventListener('input', renderNpcCards);
     if (sortSel) sortSel.addEventListener('change', renderNpcCards);
     renderNpcCards();
+
+    // Debts / Factions rendering
+    const debtsWrap = characterInfo.querySelector('#debtsWrap');
+    const factionsWrap = characterInfo.querySelector('#factionsWrap');
+    const playerName = gameState.name;
+
+    if (debtsWrap) {
+        const debts = Array.isArray(gameState.debts) ? gameState.debts : [];
+        const active = debts.filter(d => d && d.status !== 'closed');
+        if (!active.length) {
+            debtsWrap.innerHTML = `<div style="color:#888; font-style:italic;">Нет активных долгов</div>`;
+        } else {
+            debtsWrap.innerHTML = active.slice(-10).map(d => {
+                const dir = d.from === playerName ? 'Вы должны' : (d.to === playerName ? 'Вам должны' : `${d.from} должен`);
+                const who = d.from === playerName ? d.to : (d.to === playerName ? d.from : d.to);
+                const due = d.dueDay ? ` • срок: день ${d.dueDay}` : '';
+                const reason = d.reason ? ` — ${d.reason}` : '';
+                return `<div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+                    <div style="display:flex; justify-content:space-between; gap:10px;">
+                        <span style="color:#ccc;">${dir}: <strong style="color:#ffd700;">${who}</strong>${reason}</span>
+                        <span style="color:#ffd700; font-weight:800;">${d.amount}</span>
+                    </div>
+                    <div style="margin-top:4px; color:#888; font-size:0.85em;">${(d.status || 'active')}${due}</div>
+                </div>`;
+            }).join('');
+        }
+    }
+
+    if (factionsWrap) {
+        const factions = Object.values(gameState.factions || {});
+        if (!factions.length) {
+            factionsWrap.innerHTML = `<div style="color:#888; font-style:italic;">Нет известных фракций</div>`;
+        } else {
+            factionsWrap.innerHTML = factions.slice(0, 12).map(f => {
+                const disp = typeof f.disposition === 'number' ? f.disposition : 0;
+                const pct = Math.max(0, Math.min(100, Math.round(((disp + 100) / 200) * 100)));
+                const barColor = disp >= 25 ? '#4CAF50' : (disp <= -25 ? '#f44336' : '#9e9e9e');
+                return `<div style="background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);">
+                    <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+                        <span style="color:#ccc;"><strong style="color:#ffd700;">${f.name}</strong>${f.notes ? ` — <span style="color:#aaa;">${f.notes}</span>` : ''}</span>
+                        <span style="color:${barColor}; font-weight:800;">${disp}</span>
+                    </div>
+                    <div style="margin-top:8px; height:8px; background: rgba(0,0,0,0.5); border-radius: 999px; overflow:hidden; border: 1px solid rgba(255,255,255,0.08);">
+                        <div style="height:100%; width:${pct}%; background:${barColor};"></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+    }
 }
 
 function updateSkills() {    // Навыки
@@ -1516,9 +1731,11 @@ function restoreGame(savedData) {
                 gameState = window.pendingRestore.gameState;
                 currentScene = window.pendingRestore.currentScene;
                 currentChoices = window.pendingRestore.currentChoices;
+                lastEffects = [];
+                lastCheckResult = null;
 
                 updateUI();
-                displayScene(currentScene, currentChoices);
+                displayScene(currentScene, currentChoices, false, '', lastEffects, lastCheckResult);
 
                 document.getElementById('startScreen').classList.add('hidden');
                 document.getElementById('gameScreen').classList.remove('hidden');

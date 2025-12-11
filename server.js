@@ -42,6 +42,64 @@ function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));
 }
 
+function hashStringToInt(str) {
+    // FNV-1a 32-bit
+    let h = 2166136261;
+    const s = String(str || '');
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+}
+
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a |= 0;
+        a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function getTurnIndex(gameState) {
+    return Array.isArray(gameState.history) ? gameState.history.length : 0;
+}
+
+function getSkillValue(gameState, key) {
+    if (!key) return 0;
+    const k = String(key).toLowerCase();
+    // Skills: combat/stealth/speech/survival are 0..100 levels in this project
+    if (gameState.skills && gameState.skills[k] && typeof gameState.skills[k].level === 'number') {
+        return clamp(gameState.skills[k].level, 0, 100);
+    }
+    // Attributes: strength/agility/intelligence/charisma are 1..10
+    if (gameState.attributes && typeof gameState.attributes[k] === 'number') {
+        return clamp(gameState.attributes[k], 1, 10) * 10; // normalize to 0..100-ish
+    }
+    return 0;
+}
+
+function resolveSkillCheck(gameState, skillCheck, sessionId) {
+    if (!skillCheck || typeof skillCheck !== 'object') return null;
+    const kind = typeof skillCheck.kind === 'string' ? skillCheck.kind : 'skill';
+    const key = typeof skillCheck.key === 'string' ? skillCheck.key : '';
+    const difficulty = typeof skillCheck.difficulty === 'number' ? clamp(Math.round(skillCheck.difficulty), 0, 100) : 50;
+
+    const actor = getSkillValue(gameState, key);
+    // Chance curve: start at 50%, add (actor - difficulty) * 0.7
+    const chance = clamp(Math.round(50 + (actor - difficulty) * 0.7), 5, 95);
+
+    const seed = hashStringToInt(`${sessionId}|${getTurnIndex(gameState)}|${kind}|${key}|${difficulty}`);
+    const rng = mulberry32(seed);
+    const roll = Math.floor(rng() * 100) + 1; // 1..100
+    const success = roll <= chance;
+
+    return { kind, key, difficulty, actor, chance, roll, success };
+}
+
 function stableIdFromName(name) {
     const s = String(name || '').trim().toLowerCase();
     if (!s) return 'loc_' + Math.random().toString(36).slice(2, 10);
@@ -136,6 +194,8 @@ function ensureGameStateIntegrity(gameState) {
         }));
 
     if (!gameState.npcs || typeof gameState.npcs !== 'object') gameState.npcs = {};
+    if (!gameState.factions || typeof gameState.factions !== 'object') gameState.factions = {};
+    if (!Array.isArray(gameState.debts)) gameState.debts = [];
     if (!gameState.character) gameState.character = {};
     if (!gameState.character.relationships || typeof gameState.character.relationships !== 'object') {
         gameState.character.relationships = {};
@@ -146,6 +206,72 @@ function ensureGameStateIntegrity(gameState) {
 
     if (!gameState.mapWaypoint || typeof gameState.mapWaypoint !== 'object') {
         gameState.mapWaypoint = { locationId: null, name: '' };
+    }
+
+    // Cooldown trackers (world rules)
+    if (gameState._lastMoralityChangeDay === undefined) gameState._lastMoralityChangeDay = null;
+    if (!gameState._npcDispositionLastChangeTurn || typeof gameState._npcDispositionLastChangeTurn !== 'object') {
+        gameState._npcDispositionLastChangeTurn = {};
+    }
+}
+
+function applyWorldRules(gameState, parsed) {
+    // Called BEFORE applyChanges; may adjust parsed deltas/fields.
+    ensureGameStateIntegrity(gameState);
+
+    const currentDay = gameState.date?.dayOfGame ?? null;
+    const turn = getTurnIndex(gameState);
+
+    // Morality cooldown: don't change multiple times per day unless big event
+    if (parsed.morality !== 0) {
+        const big = Math.abs(parsed.morality) >= 3;
+        if (!big && currentDay !== null && gameState._lastMoralityChangeDay === currentDay) {
+            console.log(`ℹ️ Мораль не изменена: уже менялась сегодня (день ${currentDay}).`);
+            parsed.morality = 0;
+        } else if (parsed.morality !== 0 && currentDay !== null) {
+            gameState._lastMoralityChangeDay = currentDay;
+        }
+        parsed.morality = clamp(parsed.morality, -5, 5);
+    }
+
+    // Reputation: keep existing logic later, but reduce extreme swings
+    parsed.reputation = clamp(parsed.reputation, -5, 5);
+
+    // Economy guardrails: big coin swings require justification in effects
+    if (parsed.coins !== 0 && Math.abs(parsed.coins) > 30) {
+        const txt = (Array.isArray(parsed.effects) ? parsed.effects : [])
+            .map(e => (e?.reason ? String(e.reason).toLowerCase() : ''))
+            .join(' ');
+        const hasJustification = /оплат|плат|торг|награ|контракт|штраф|взятк|продал|купил/.test(txt);
+        if (!hasJustification) {
+            console.warn(`⚠️ Big coins delta without justification (${parsed.coins}) → clamping to +/-30`);
+            parsed.coins = parsed.coins > 0 ? 30 : -30;
+        }
+    }
+
+    // Relationship/disposition cooldown: prevent spammy oscillations
+    if (parsed.characterUpdate && parsed.characterUpdate.relationships && typeof parsed.characterUpdate.relationships === 'object') {
+        Object.keys(parsed.characterUpdate.relationships).forEach(npcName => {
+            const rel = parsed.characterUpdate.relationships[npcName];
+            if (!rel || typeof rel !== 'object') return;
+            if (typeof rel.disposition !== 'number' || Number.isNaN(rel.disposition)) return;
+
+            const lastTurn = gameState._npcDispositionLastChangeTurn[npcName];
+            const tooSoon = typeof lastTurn === 'number' && (turn - lastTurn) < 3;
+            if (tooSoon) {
+                // strip disposition update, keep notes/role/status
+                console.log(`ℹ️ Disposition for "${npcName}" not changed: cooldown (3 turns).`);
+                delete rel.disposition;
+                return;
+            }
+            // clamp per-update move (AI gives absolute target sometimes; treat as absolute but clamp delta)
+            const npc = gameState.npcs?.[npcName];
+            const current = typeof npc?.disposition === 'number' ? npc.disposition : 0;
+            const target = clamp(Math.round(rel.disposition), -100, 100);
+            const delta = clamp(target - current, -5, 5);
+            rel.disposition = current + delta;
+            gameState._npcDispositionLastChangeTurn[npcName] = turn;
+        });
     }
 }
 
@@ -504,6 +630,14 @@ function buildPrompt(gameState, playerChoice, previousScene) {
         }).join('\n')
         : 'Пока никого не знаете.';
 
+    const factionsText = Object.values(gameState.factions || {}).length
+        ? Object.values(gameState.factions).map(f => `- ${f.name}: disposition ${f.disposition}${f.notes ? ` — ${f.notes}` : ''}`).join('\n')
+        : 'Нет известных фракций.';
+
+    const debtsText = Array.isArray(gameState.debts) && gameState.debts.length
+        ? gameState.debts.slice(-15).map(d => `- ${d.from} должен ${d.to}: ${d.amount} грошей${d.dueDay ? ` (срок: день ${d.dueDay})` : ''}${d.reason ? ` — ${d.reason}` : ''} [${d.status}]`).join('\n')
+        : 'Нет активных долгов/обещаний.';
+
     return `⚠️⚠️⚠️ ОТВЕЧАЙ СТРОГО ТОЛЬКО ВАЛИДНЫМ JSON! БЕЗ markdown, текста, комментариев, объяснений или подписи. Начинай СРАЗУ с { и заканчивай } ⚠️⚠️⚠️
 
 Ты мастер повествования RPG в стиле Kingdom Come: Deliverance (средневековая Богемия 1403). Создавай реалистичный, жестокий мир с последствиями.
@@ -543,6 +677,12 @@ ${historyContext}
 ═══ ОТНОШЕНИЯ И ЗНАКОМСТВА ═══
 Известные NPC (структурировано):
 ${knownNpcsText}
+
+Фракции (если есть):
+${factionsText}
+
+Долги/обещания (если есть):
+${debtsText}
 
 ═══ АКТИВНЫЕ ЗАДАЧИ (КВЕСТЫ) ═══
 ${(gameState.quests || []).map(q => `- ${q.name}: ${q.status} (${q.description})`).join('\n') || 'Нет активных задач.'}
@@ -587,11 +727,29 @@ ${(gameState.worldEdges || []).slice(-30).map(e => `- ${e.fromId} <-> ${e.toId} 
 3. ТЮРЬМА: НЕ конец игры. gameOver: false.
 4. ОПИСАНИЕ: Макс 130 слов, 4-6 предложений. Атмосферно. Используй "вы/вас". ТОЛЬКО СРЕДНЕВЕКОВЬЕ (никаких машин/небоскрёбов, если это не сюжетный триггер).
 
+🔥 ЖЕЛЕЗНОЕ ПРАВИЛО СМЕРТИ (ОБЯЗАТЕЛЬНО):
+- Если итоговое здоровье после применения дельты health становится <= 0 (текущее здоровье + health <= 0),
+  то ты ОБЯЗАН поставить "gameOver": true и заполнить "deathReason" (кратко) и "description" (сцена смерти).
+- В этом случае НЕ предлагай продолжение истории. choices можешь оставить любыми, но они будут проигнорированы.
+
 5. ⛔ ПРОВЕРКИ ХАРАКТЕРИСТИК (SKILL CHECKS):
     - Игрок НЕ может делать то, что физически невозможно для его характеристик (см. раздел ХАРАКТЕРИСТИКИ).
     - Если игрок с Силой 3 пытается поднять лошадь -> Опиши провал и потерю выносливости/здоровья.
     - Если игрок с Харизмой 1 хамит страже -> Опиши наказание (тюрьма, штраф, драка).
     - НЕ подыгрывай. Мир жесток. Помни: 3 - это обычный слабый крестьянин.
+
+7. 🎲 ДЕТЕРМИНИРОВАННЫЕ ПРОВЕРКИ (AI предлагает, сервер решает):
+Если исход критичен/спорен (убеждение, скрытность, кража, бой, риск смерти, крупные деньги, репутация) —
+используй "skillCheck" вместо “решения на глаз”.
+Формат:
+"skillCheck": {
+  "kind": "skill"|"attribute",
+  "key": "speech"|"combat"|"stealth"|"survival"|"strength"|"agility"|"intelligence"|"charisma",
+  "difficulty": 0-100,
+  "onSuccess": { "description": "...", "effects": [ ... ], "choices": ["...", "...", "..."] },
+  "onFail": { "description": "...", "effects": [ ... ], "choices": ["...", "...", "..."] }
+}
+ВАЖНО: Не решай сам успех/провал — сервер выберет ветку. Ты обязан заполнить обе ветки.
 
 6. ⛔ ЗАПРЕТ НА "ДЕЖАВЮ" И "РЕЛЬСЫ":
 - БЕЗ ПОВТОРЯЮЩИХСЯ ВИДЕНИЙ: "Внезапно мелькает видение..." — ЗАПРЕЩЕНО! Описывай только реальный мир.
@@ -654,12 +812,22 @@ ${(gameState.worldEdges || []).slice(-30).map(e => `- ${e.fromId} <-> ${e.toId} 
    ⚠️ ВАЖНО: При входе в НОВОЕ здание (таверна, кузница, и т.п.) - ОБЯЗАТЕЛЬНО добавь newLocation!
 8. NPC: Если встретил NPC или узнал где он -> npcLocation: {name: "Имя", location: "Название локации"}.
 9. ОТНОШЕНИЯ: При знакомстве с NPC добавь в characterUpdate.relationships: 
-   {"Имя": {"status": "знакомый/приятель/враг/стража", "role": "кто он (хозяин таверны/кузнец/и т.п.)", "disposition": 0, "notes": "коротко: за что запомнился"}}
+   {"Имя": {"status": "знакомый/приятель/враг/стража", "role": "кто он (хозяин таверны/кузнец/и т.п.)", "faction": "если относится к группе", "disposition": 0, "notes": "коротко: за что запомнился", "memoryAdd": ["1-2 факта, что он запомнил о вас"]}}
    ⚠️ disposition — это целое от -100 (вражда) до +100 (полная лояльность). Меняй его редко и обоснованно.
+
+10. ДОЛГИ/ОБЕЩАНИЯ (debtsUpdate):
+Если вы взяли деньги в долг / пообещали оплату / вам должны — добавь запись:
+debtsUpdate: [{ "from": "Кто должен", "to": "Кому должен", "amount": 120, "reason": "за ночлег", "dueDay": 3, "status": "active" }]
+
+11. ФРАКЦИИ (factionUpdates):
+Если в сюжете появляется группа (стража, гильдия, банда, купцы) — заведи/обнови:
+factionUpdates: [{ "name": "Стража Ратае", "dispositionDelta": -2, "notes": "подозревают из-за драки" }]
 
 ═══ ФОРМАТ ОТВЕТА (ТОЛЬКО JSON) ═══
 {
   "description": "...",
+  "gameOver": false,
+  "deathReason": "",
   "health": 0,
   "stamina": 0,
   "coins": 0,
@@ -695,7 +863,7 @@ ${(gameState.worldEdges || []).slice(-30).map(e => `- ${e.fromId} <-> ${e.toId} 
 6. Репутация: ЧИСЛО (дельта). □ Ничего заметного? → 0. □ Высокая репутация (70+) → максимум +1? Учтена история?
 7. Выживание: satiety/energy менял только за еду/сон? satiety/energy НЕ уменьшал вручную “за время”?
 8. Инвентарь: usedItems с повторами для количества?
-9. Смерть: gameOver только при реальной смерти?
+9. Смерть: если (текущее здоровье + health) <= 0 → gameOver:true и deathReason заполнен?
 10. Диалог: правильные реплики если isDialogue?
 
 Исправь ошибки перед отправкой! ОТВЕЧАЙ ТОЛЬКО ЧИСТЫМ JSON БЕЗ ТЕКСТА ВНЕ { }!`;
@@ -721,17 +889,50 @@ function parseAIResponse(text) {
 
         console.log('🔍 RAW AI RESPONSE:', JSON.stringify(parsed, null, 2));
 
-        // КРИТИЧЕСКИ ВАЖНО: Валидация обязательных полей
-        if (!parsed.description) parsed.description = 'Вы продолжаете свой путь...';
+        // === STRICT SCHEMA NORMALIZATION (drop unknown keys, coerce types, defaults) ===
+        const allowedKeys = new Set([
+            // narrative / flow
+            'description', 'choices', 'isDialogue', 'speakerName',
+            'gameOver', 'deathReason',
+            // deltas
+            'health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange', 'satiety', 'energy',
+            // world
+            'locationChange', 'newLocation', 'npcLocation',
+            // progression
+            'skillXP',
+            // inventory/equipment
+            'usedItems', 'newItems', 'equipment', 'newEquipment',
+            // character/meta
+            'characterUpdate', 'questsUpdate',
+            // intention → outcome
+            'effects',
+            // deterministic checks (optional)
+            'skillCheck',
+            // npc systems (optional)
+            'npcUpdates', 'debtsUpdate', 'factionUpdates'
+        ]);
+
+        // Remove unknown keys to prevent hallucinated state
+        Object.keys(parsed).forEach(k => {
+            if (!allowedKeys.has(k)) delete parsed[k];
+        });
+
+        // Defaults for mandatory-ish fields
+        if (typeof parsed.description !== 'string' || !parsed.description.trim()) {
+            parsed.description = 'Вы продолжаете свой путь...';
+        }
+        if (!Array.isArray(parsed.choices) || parsed.choices.length === 0) {
+            parsed.choices = ['Продолжить', 'Осмотреться', 'Отдохнуть'];
+        }
+        if (typeof parsed.isDialogue !== 'boolean') parsed.isDialogue = false;
+        if (typeof parsed.speakerName !== 'string') parsed.speakerName = '';
+        if (typeof parsed.gameOver !== 'boolean') parsed.gameOver = false;
+        if (typeof parsed.deathReason !== 'string') parsed.deathReason = '';
 
         // Логируем длину описания
         if (parsed.description) {
             const words = parsed.description.split(/\s+/);
             console.log(`📝 Получено описание: ${words.length} слов`);
-        }
-
-        if (!Array.isArray(parsed.choices) || parsed.choices.length === 0) {
-            parsed.choices = ['Продолжить', 'Осмотреться', 'Отдохнуть'];
         }
 
         // КРИТИЧЕСКИ ВАЖНО: Проверка и инициализация инвентарных полей
@@ -811,6 +1012,57 @@ function parseAIResponse(text) {
             parsed.skillXP = {};
         }
 
+        // Validate effects (intention → outcome)
+        if (!Array.isArray(parsed.effects)) {
+            parsed.effects = [];
+        } else {
+            const allowedStats = new Set(['health', 'stamina', 'coins', 'reputation', 'morality', 'satiety', 'energy', 'timeChange']);
+            parsed.effects = parsed.effects
+                .filter(e => e && typeof e === 'object')
+                .map(e => ({
+                    stat: typeof e.stat === 'string' ? e.stat : '',
+                    delta: typeof e.delta === 'number' && !Number.isNaN(e.delta) ? e.delta : 0,
+                    reason: typeof e.reason === 'string' ? e.reason : ''
+                }))
+                .filter(e => allowedStats.has(e.stat) && e.delta !== 0)
+                .slice(0, 20);
+        }
+
+        // Validate skillCheck (deterministic checks)
+        if (parsed.skillCheck && typeof parsed.skillCheck === 'object') {
+            const sc = parsed.skillCheck;
+            parsed.skillCheck = {
+                kind: typeof sc.kind === 'string' ? sc.kind : 'skill', // 'skill' | 'attribute'
+                key: typeof sc.key === 'string' ? sc.key : '', // 'speech' or 'charisma', etc.
+                difficulty: typeof sc.difficulty === 'number' && !Number.isNaN(sc.difficulty) ? sc.difficulty : 50,
+                // Branch outcomes (optional but recommended)
+                onSuccess: sc.onSuccess && typeof sc.onSuccess === 'object' ? sc.onSuccess : null,
+                onFail: sc.onFail && typeof sc.onFail === 'object' ? sc.onFail : null
+            };
+        } else {
+            parsed.skillCheck = null;
+        }
+
+        // Fallback: auto-generate effects from deltas if AI didn't provide them
+        if (parsed.effects.length === 0) {
+            const auto = [];
+            const add = (stat, delta, reason) => {
+                if (delta && typeof delta === 'number' && !Number.isNaN(delta) && delta !== 0) {
+                    auto.push({ stat, delta, reason });
+                }
+            };
+            add('health', parsed.health, parsed.health < 0 ? 'Получен урон' : 'Восстановление');
+            add('stamina', parsed.stamina, parsed.stamina < 0 ? 'Усталость/усилие' : 'Отдых/восстановление');
+            add('coins', parsed.coins, parsed.coins < 0 ? 'Расход' : 'Доход');
+            add('reputation', parsed.reputation, 'Репутация изменилась');
+            add('morality', parsed.morality, 'Мораль изменилась');
+            add('satiety', parsed.satiety, parsed.satiety < 0 ? 'Голодание' : 'Еда/напиток');
+            add('energy', parsed.energy, parsed.energy < 0 ? 'Усталость' : 'Сон/отдых');
+            add('timeChange', parsed.timeChange, 'Прошло времени');
+            parsed.effects = auto.filter(e => e.delta !== 0);
+        }
+
+        // Validate characterUpdate
         // Validate characterUpdate
         if (!parsed.characterUpdate || typeof parsed.characterUpdate !== 'object') {
             parsed.characterUpdate = { recentEvents: [], importantChoices: [], relationships: {}, milestone: '' };
@@ -1088,8 +1340,25 @@ function applyChanges(gameState, parsed) {
                     if (rel.role && typeof rel.role === 'string') npc.role = rel.role;
                     if (rel.status && typeof rel.status === 'string') npc.status = rel.status;
                     if (rel.notes && typeof rel.notes === 'string') npc.notes = rel.notes;
+                    if (rel.faction && typeof rel.faction === 'string') npc.faction = rel.faction;
                     if (typeof rel.disposition === 'number' && !Number.isNaN(rel.disposition)) {
                         npc.disposition = clamp(Math.round(rel.disposition), -100, 100);
+                    }
+                    if (Array.isArray(rel.memory)) {
+                        const mem = rel.memory
+                            .filter(x => typeof x === 'string' && x.trim().length > 0)
+                            .map(x => x.trim())
+                            .slice(-5);
+                        if (mem.length) npc.memory = mem;
+                    } else if (Array.isArray(rel.memoryAdd)) {
+                        const add = rel.memoryAdd
+                            .filter(x => typeof x === 'string' && x.trim().length > 0)
+                            .map(x => x.trim());
+                        if (add.length) {
+                            const existing = Array.isArray(npc.memory) ? npc.memory : [];
+                            const merged = [...existing, ...add].slice(-5);
+                            npc.memory = merged;
+                        }
                     }
                 }
 
@@ -1343,6 +1612,57 @@ function applyChanges(gameState, parsed) {
         console.log(`🔍 [DEBUG] Energy Update: Old=${gameState.energy}, AI_Proposed=${parsed.energy}, New=${Math.min(100, (gameState.energy || 0) + parsed.energy)}`);
         gameState.energy = Math.min(100, (gameState.energy || 0) + parsed.energy);
     }
+
+    // === FACTIONS ===
+    if (Array.isArray(parsed.factionUpdates)) {
+        if (!gameState.factions) gameState.factions = {};
+        parsed.factionUpdates.forEach(f => {
+            if (!f || typeof f !== 'object') return;
+            const name = typeof f.name === 'string' ? f.name.trim() : '';
+            if (!name) return;
+            const existing = gameState.factions[name] || { name, disposition: 0, notes: '' };
+            const delta = typeof f.dispositionDelta === 'number' && !Number.isNaN(f.dispositionDelta) ? f.dispositionDelta : 0;
+            const abs = typeof f.disposition === 'number' && !Number.isNaN(f.disposition) ? f.disposition : null;
+            if (abs !== null) existing.disposition = clamp(Math.round(abs), -100, 100);
+            else if (delta) existing.disposition = clamp(existing.disposition + clamp(Math.round(delta), -5, 5), -100, 100);
+            if (typeof f.notes === 'string' && f.notes.trim()) existing.notes = f.notes.trim();
+            gameState.factions[name] = existing;
+        });
+    }
+
+    // === DEBTS / PROMISES ===
+    if (Array.isArray(parsed.debtsUpdate)) {
+        if (!Array.isArray(gameState.debts)) gameState.debts = [];
+        parsed.debtsUpdate.forEach(d => {
+            if (!d || typeof d !== 'object') return;
+            const from = typeof d.from === 'string' ? d.from.trim() : '';
+            const to = typeof d.to === 'string' ? d.to.trim() : '';
+            if (!from || !to) return;
+            const amount = typeof d.amount === 'number' && !Number.isNaN(d.amount) ? clamp(Math.round(d.amount), 1, 5000) : 0;
+            const reason = typeof d.reason === 'string' ? d.reason.trim() : '';
+            const status = typeof d.status === 'string' ? d.status.trim() : 'active';
+            const dueDay = typeof d.dueDay === 'number' && !Number.isNaN(d.dueDay) ? Math.max(0, Math.round(d.dueDay)) : null;
+
+            // Upsert by (from,to,reason,status-active)
+            const idx = gameState.debts.findIndex(x =>
+                x && x.from === from && x.to === to && (x.reason || '') === reason && x.status !== 'closed'
+            );
+            const entry = {
+                from,
+                to,
+                amount,
+                reason,
+                status,
+                dueDay,
+                createdDay: gameState.date?.dayOfGame ?? null
+            };
+            if (idx >= 0) gameState.debts[idx] = { ...gameState.debts[idx], ...entry };
+            else gameState.debts.push(entry);
+        });
+
+        // Keep debts list bounded
+        if (gameState.debts.length > 50) gameState.debts = gameState.debts.slice(-50);
+    }
 }
 
 wss.on('connection', (ws) => {
@@ -1517,6 +1837,51 @@ wss.on('connection', (ws) => {
                     return;
                 }
 
+                // Apply world rules before any state application (cooldowns, economy, etc.)
+                applyWorldRules(gameState, parsed);
+
+                // 🔥 Hard rule: if AI reduced health to <=0, character dies even if AI forgot gameOver
+                const projectedHealth = Math.max(0, Math.min(gameState.maxHealth, gameState.health + (parsed.health || 0)));
+                if (projectedHealth <= 0) {
+                    if (!parsed.gameOver) {
+                        console.warn('⚠️ AI killed the player (health<=0) but did not set gameOver. Forcing gameOver.');
+                    }
+                    parsed.gameOver = true;
+                    if (!parsed.deathReason || typeof parsed.deathReason !== 'string') {
+                        parsed.deathReason = 'Смерть от ран';
+                    }
+                    if (!parsed.description || typeof parsed.description !== 'string' || !parsed.description.trim()) {
+                        parsed.description = 'Ваши силы иссякли. Мир темнеет перед глазами.\n\nВы падаете на землю и больше не поднимаетесь.';
+                    }
+                }
+
+                // 🎲 Deterministic skill/attribute check (AI proposes, server decides)
+                let resolvedCheck = null;
+                if (parsed.skillCheck && typeof parsed.skillCheck === 'object' && parsed.skillCheck.key) {
+                    resolvedCheck = resolveSkillCheck(gameState, parsed.skillCheck, sessionId);
+                    if (resolvedCheck) {
+                        const branch = resolvedCheck.success ? parsed.skillCheck.onSuccess : parsed.skillCheck.onFail;
+                        // Apply branch override (optional)
+                        if (branch && typeof branch === 'object') {
+                            if (typeof branch.description === 'string' && branch.description.trim()) {
+                                parsed.description = branch.description;
+                            }
+                            if (Array.isArray(branch.choices) && branch.choices.length) {
+                                parsed.choices = branch.choices;
+                            }
+                            if (branch.effects && Array.isArray(branch.effects)) {
+                                // Replace effects; numeric deltas still applied from top-level fields
+                                parsed.effects = branch.effects;
+                            }
+                        }
+                        // Attach check result to effects for UI transparency
+                        const checkLine = `${resolvedCheck.success ? 'Успех' : 'Провал'} проверки ${resolvedCheck.key} (сложн. ${resolvedCheck.difficulty})`;
+                        parsed.effects = Array.isArray(parsed.effects) ? parsed.effects : [];
+                        parsed.effects.unshift({ stat: 'timeChange', delta: 0, reason: checkLine });
+                        // Normalize: remove 0-delta effects later on client display filter already does
+                    }
+                }
+
                 // КРИТИЧЕСКИ ВАЖНО: Проверяем, умер ли персонаж
                 if (parsed.gameOver) {
                     console.log(`💀 GAME OVER для ${gameState.name}: ${parsed.deathReason}`);
@@ -1570,7 +1935,9 @@ wss.on('connection', (ws) => {
                     description: parsed.description,
                     choices: parsed.choices,
                     isDialogue: parsed.isDialogue || false,
-                    speakerName: parsed.speakerName || ''
+                    speakerName: parsed.speakerName || '',
+                    effects: parsed.effects || [],
+                    checkResult: resolvedCheck
                 }));
             } else if (data.type === 'clientUpdate') {
                 // Client-side UX updates that should persist (waypoint, UI prefs, etc.)
