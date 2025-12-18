@@ -274,29 +274,33 @@
 
                         <!-- Item Details Panel -->
                         <div class="item-details-panel hidden" id="itemDetailsPanel">
-                            <div class="item-header">
-                                <div class="item-icon-large" id="detailIcon">📦</div>
-                                <div class="item-info">
-                                    <h4 id="detailName">Название предмета</h4>
-                                    <span class="item-type" id="detailType">Тип предмета</span>
+                            <div class="header">
+                                <div class="logo">BOHEMIA AI RPG <span style="font-size:0.5em; color:#555;">v0.6 (LOGIC
+                                        FIX)</span></div>
+                                <div class="model-info"></div>
+                                <div class="item-header">
+                                    <div class="item-icon-large" id="detailIcon">📦</div>
+                                    <div class="item-info">
+                                        <h4 id="detailName">Название предмета</h4>
+                                        <span class="item-type" id="detailType">Тип предмета</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <p class="item-desc" id="detailDesc">Описание предмета...</p>
-                            <div class="item-actions">
-                                <button class="action-btn use-btn" id="useItemBtn">Использовать</button>
-                                <button class="action-btn drop-btn" id="dropItemBtn">Выбросить</button>
+                                <p class="item-desc" id="detailDesc">Описание предмета...</p>
+                                <div class="item-actions">
+                                    <button class="action-btn use-btn" id="useItemBtn">Использовать</button>
+                                    <button class="action-btn drop-btn" id="dropItemBtn">Выбросить</button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Скрытый input для выбора файла -->
+            <input type="file" id="fileInput" accept=".json" style="display: none;">
         </div>
 
-        <!-- Скрытый input для выбора файла -->
-        <input type="file" id="fileInput" accept=".json" style="display: none;">
-    </div>
-
-    <script src="client.js"></script>
+        <script src="client.js"></script>
 </body>
 
 </html>

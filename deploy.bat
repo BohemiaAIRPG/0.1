@@ -51,9 +51,14 @@ if %errorlevel% neq 0 (
 
 :: Ensure we are on main branch
 git branch -M main
-git push origin main
+:: git push origin main
+git push -f origin main
 
 echo.
+echo ----------------------------------------------------
+echo  Deployed to MAIN branch (Force Push).
+echo ----------------------------------------------------
+pause
 echo ==========================================
 echo      DEPLOYMENT COMPLETED SUCCESSFULLY
 echo ==========================================

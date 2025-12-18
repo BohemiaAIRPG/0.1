@@ -668,24 +668,44 @@ ${JSON.stringify(context, null, 2)}
    - Используй атрибуты для поощрения усилий! Пример: если игрок долго бежал с грузом, можно дать strength: 1.
 8. СМЕРТЬ: Если (здоровье + дельта health) <= 0 -> gameOver: true, deathReason: "причина".
 
-⚠️ КРИТИЧЕСКИ ВАЖНО: Нейросеть часто забывает обновлять "newEquipment", когда игрок надевает одежду в описании. НЕ ЗАБЫВАЙ ЭТО. Если одежда на персонаже — она должна быть в слоте armor.`;
+═══ ВАЖНЫЕ УТОЧНЕНИЯ ВРЕМЕНИ И ПОГОДЫ ═══
+- Текущее время: ${context.currentSituation.time}. ТВОЕ ОПИСАНИЕ ОБЯЗАНО СООТВЕТСТВОВАТЬ ЭТОМУ ВРЕМЕНИ. Если это "ночь" — должно быть темно. Если "утро" — рассвет.
+- СТРОГО СЛЕДИ ЗА ЛОГИКОЙ: Нельзя сказать "солнце в зените", если сейчас ночь.
+
+═══ СТИЛЬ ПОВЕСТВОВАНИЯ ═══
+- ЖАНР: Dark Medieval RPG (Kingdom Come: Deliverance style).
+- ТОН: Суровый, реалистичный, приземленный. Грязь, кровь, голод, холод. Никакой магии, никаких благородных эльфов. Только люди и суровая реальность.
+- РОЛЬ (GM): Ты — безжалостный мастер подземелий. Ты не спасаешь игрока. Если он делает глупость — он страдает.
+- ДЕТАЛИЗАЦИЯ: Описывай запахи (вонь, гарь), тактильные ощущения (холод камня, зуд), звуки. Это погружает.
+- ИНТЕРАКТИВНОСТЬ: Мир должен реагировать. Если игрок голый — над ним смеются. Если он избит — он хромает.
+
+⚠️ КРИТИЧЕСКИ ВАЖНО: Нейросеть часто забывает обновлять "newEquipment", когда игрок надевает одежду в описании. НЕ ЗАБЫВАЙ ЭТО. Если одежда на персонаже — она должна быть в слоте armor.
+`;
 }
 
 function parseAIResponse(text) {
     try {
-        const jsonMatch = text.replace(/\r/g, '').match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            throw new Error('JSON not found');
-        }
-        let cleaned = jsonMatch[0]
-            .replace(/\/\/.*$/gm, '')
-            .replace(/,\s*}/g, '}')
-            .replace(/,\s*]/g, ']')
-            .replace(/\\"(\w+)\\"/g, '"$1"') // Fix: \"key\" -> "key" (AI escaping glitch)
-            .replace(/:(\s*)\+(\d)/g, ':$1$2') // Fix: :+10 → :10 (AI копирует + из примеров)
+        // 1. Предварительная очистка (удаляем Markdown блоки)
+        let cleaned = text
+            .replace(/```json/gi, '')
+            .replace(/```/g, '')
             .trim();
 
-        console.log('🧹 Cleaned AI response:', cleaned);
+        // 2. Поиск JSON объекта
+        const jsonMatch = cleaned.replace(/\r/g, '').match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            throw new Error('JSON object not found in response');
+        }
+
+        cleaned = jsonMatch[0]
+            .replace(/\/\/.*$/gm, '') // Remove JS comments
+            .replace(/,\s*}/g, '}')   // Remove trailing commas
+            .replace(/,\s*]/g, ']')
+            .replace(/\\"(\w+)\\"/g, '"$1"') // Fix: \"key\" -> "key"
+            .replace(/:(\s*)\+(\d)/g, ':$1$2') // Fix: :+10 → :10
+            .trim();
+
+        console.log('🧹 Cleaned AI response (start):', cleaned.substring(0, 100) + '...');
 
         const parsed = JSON.parse(cleaned);
 
@@ -1106,25 +1126,74 @@ function applyChanges(gameState, parsed) {
 
     // Обновляем экипировку (КРИТИЧЕСКИ ВАЖНО!)
     if (parsed.equipment) {
-        if (parsed.equipment.weapon) {
-            const oldWeapon = gameState.equipment.weapon.name;
-            gameState.equipment.weapon = {
-                name: parsed.equipment.weapon.name || gameState.equipment.weapon.name,
-                condition: parsed.equipment.weapon.condition !== undefined ? parsed.equipment.weapon.condition : gameState.equipment.weapon.condition
-            };
-            if (oldWeapon !== gameState.equipment.weapon.name) {
-                console.log(`⚔️ Оружие изменено: "${oldWeapon}" → "${gameState.equipment.weapon.name}"`);
+        // === WEAPON SWAP ===
+        if (parsed.equipment.weapon && parsed.equipment.weapon.name) {
+            const newWeaponName = parsed.equipment.weapon.name;
+            const oldWeaponName = gameState.equipment.weapon.name;
+
+            if (newWeaponName !== oldWeaponName) {
+                console.log(`⚔️ Смена оружия: "${oldWeaponName}" → "${newWeaponName}"`);
+
+                // 1. Попытка найти новый предмет в инвентаре и забрать его
+                const invIdx = gameState.inventory.findIndex(i => i.name.toLowerCase() === newWeaponName.toLowerCase());
+                if (invIdx >= 0) {
+                    gameState.inventory[invIdx].quantity--;
+                    if (gameState.inventory[invIdx].quantity <= 0) {
+                        gameState.inventory.splice(invIdx, 1);
+                    }
+                }
+
+                // 2. Вернуть старое оружие в инвентарь (если это не "нет" и не "кулаки")
+                if (oldWeaponName && oldWeaponName !== 'нет' && oldWeaponName !== 'кулаки') {
+                    const existingOld = gameState.inventory.find(i => i.name.toLowerCase() === oldWeaponName.toLowerCase());
+                    if (existingOld) {
+                        existingOld.quantity++;
+                    } else {
+                        gameState.inventory.push({ name: oldWeaponName, quantity: 1, type: 'weapon' });
+                    }
+                }
+
+                // 3. Надеть новое
+                gameState.equipment.weapon = {
+                    name: newWeaponName,
+                    condition: parsed.equipment.weapon.condition || 100
+                };
             }
         }
 
-        if (parsed.equipment.armor) {
-            const oldArmor = gameState.equipment.armor.name;
-            gameState.equipment.armor = {
-                name: parsed.equipment.armor.name || gameState.equipment.armor.name,
-                condition: parsed.equipment.armor.condition !== undefined ? parsed.equipment.armor.condition : gameState.equipment.armor.condition
-            };
-            if (oldArmor !== gameState.equipment.armor.name) {
-                console.log(`🛡️ Доспех изменён: "${oldArmor}" → "${gameState.equipment.armor.name}"`);
+        // === ARMOR SWAP ===
+        if (parsed.equipment.armor && parsed.equipment.armor.name) {
+            const newArmorName = parsed.equipment.armor.name;
+            const oldArmorName = gameState.equipment.armor.name;
+
+            if (newArmorName !== oldArmorName) {
+                console.log(`🛡️ Смена брони: "${oldArmorName}" → "${newArmorName}"`);
+
+                // 1. Попытка найти новый предмет в инвентаре и забрать его
+                const invIdx = gameState.inventory.findIndex(i => i.name.toLowerCase() === newArmorName.toLowerCase());
+                if (invIdx >= 0) {
+                    gameState.inventory[invIdx].quantity--;
+                    if (gameState.inventory[invIdx].quantity <= 0) {
+                        gameState.inventory.splice(invIdx, 1);
+                    }
+                }
+
+                // 2. Вернуть старую броню в инвентарь (если это не "нет", "тряпье" или "голое тело")
+                // Примечание: "тряпье" можно считать одеждой, если AI решит снять его ради лат.
+                if (oldArmorName && oldArmorName !== 'нет' && oldArmorName !== 'голое тело') {
+                    const existingOld = gameState.inventory.find(i => i.name.toLowerCase() === oldArmorName.toLowerCase());
+                    if (existingOld) {
+                        existingOld.quantity++;
+                    } else {
+                        gameState.inventory.push({ name: oldArmorName, quantity: 1, type: 'armor' });
+                    }
+                }
+
+                // 3. Надеть новое
+                gameState.equipment.armor = {
+                    name: newArmorName,
+                    condition: parsed.equipment.armor.condition || 100
+                };
             }
         }
     }
@@ -1505,6 +1574,29 @@ function applyChanges(gameState, parsed) {
     }
 }
 
+// Helper to format description on server side
+function formatDescription(text) {
+    if (!text) return '';
+    let processed = text;
+    // 1. Decode entities
+    processed = processed
+        .replace(/&quot;/g, '"')
+        .replace(/&laquo;/g, '«')
+        .replace(/&raquo;/g, '»')
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&nbsp;/g, ' ');
+
+    // 2. Format Dialogue (Aggressive Regex)
+    // Matches: marker (optional quotes) > whitespace "Quote..."
+    processed = processed.replace(/["'„“]?dialogue-speech["'”]?\s*>\s*([«"“][^]+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
+
+    // 3. Cleanup leftover markers
+    processed = processed.replace(/["'„“]?dialogue-speech["'”]?\s*>/gi, '');
+
+    return processed;
+}
+
 wss.on('connection', (ws) => {
     const sessionId = Math.random().toString(36).substr(2, 9);
     console.log(`✅ Client connected, SessionID: ${sessionId} `);
@@ -1531,11 +1623,13 @@ wss.on('connection', (ws) => {
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голая и избитая. Тело покрыто ссадинами и грязью.' :
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голый и избитый. Тело покрыто ссадинами и грязью.';
 
+                const introText = `${genderDesc} Пытаясь сфокусировать взгляд, вы видите деревянные дома с соломенными крышами, повозки, толпу людей в грубой средневековой одежде. Они останавливаются, показывают на вас пальцем. "dialogue-speech">«Смотрите, еще один бродяга!»`;
+
                 ws.send(JSON.stringify({
                     type: 'scene',
                     sessionId,
                     gameState,
-                    description: `${genderDesc} Пытаясь сфокусировать взгляд, вы видите деревянные дома с соломенными крышами, повозки, толпу людей в грубой средневековой одежде.Они останавливаются, показывают на вас пальцем, шепчутся.Старуха плюётся и отворачивается.Несколько детей смеются и кидают камешки.Вы пытаетесь вспомнить - что произошло ? Кто вы ? В голове вспыхивают странные образы: огромные металлические коробки на колёсах, несущиеся быстрее любой лошади, ревущие и сверкающие огнями... Толпы людей, тысячи, в гладкой, яркой одежде, движущиеся между высокими, невероятно высокими зданиями из стекла и металла... Слепящие огни повсюду - красные, жёлтые, синие, мигающие, светящиеся даже ночью... Но это бред, правда ? Удар по голове ? Лихорадка ? Это не может быть реальным.Вокруг вас грязь, навоз, деревянные хижины и люди в тряпье.Всё тело болит.Нужно срочно что - то делать.`,
+                    description: formatDescription(introText),
                     choices: [
                         'Попытаться прикрыться руками и попросить помощи у прохожих',
                         'Быстро подняться и забежать в ближайший переулок',
@@ -1777,7 +1871,7 @@ wss.on('connection', (ws) => {
                     type: 'scene',
                     sessionId,
                     gameState,
-                    description: parsed.description,
+                    description: formatDescription(parsed.description),
                     choices: parsed.choices,
                     isDialogue: parsed.isDialogue || false,
                     speakerName: parsed.speakerName || '',
