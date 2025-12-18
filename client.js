@@ -972,8 +972,8 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
             .replace(/<[^>]*>?/gm, ''); // Удаляем технические теги
 
         // 2. Обработка маркеров диалогов "dialogue-speech">
-        // Превращаем маркер в стилизованный спан (поддерживаем один уровень вложенности кавычек)
-        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>\s*([«"“](?:[^«"”]|(?:[«"“][^«"”]*[»"”]))*?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
+        // Упрощенный и надежный regex: ищем маркер и захватываем следующий текст в кавычках
+        processedDesc = processedDesc.replace(/(?:["']?dialogue-speech["']?>|&quot;dialogue-speech&quot;&gt;)\s*([«"“].+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
 
         // Удаляем "одинокие" маркеры (на всякий случай)
         processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>/gi, '');
@@ -1026,13 +1026,66 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
             `;
         }
 
-        // Effects log (compact)
-        const eff = Array.isArray(effects) ? effects : [];
-        const nonZero = eff.filter(e => e && typeof e === 'object' && typeof e.delta === 'number' && e.delta !== 0 && e.stat);
-        if (nonZero.length) {
-            const rows = nonZero.slice(0, 10).map(e => {
-                const sign = e.delta > 0 ? '+' : '';
-                const statLabel = ({
+        // 3. Отображение изменений (Effects/Deltas)
+        // Если сервер прислал effects (от AI), используем их.
+        // Если нет (или в дополнение), вычисляем разницу с предыдущим состоянием (previousGameState).
+        let allEffects = [];
+
+        // 3.1. Разница статов (Client-side Diff)
+        if (window.previousGameState) {
+            const stats = [
+                { key: 'health', label: 'Здоровье', icon: '❤️' },
+                { key: 'stamina', label: 'Выносливость', icon: '⚡' },
+                { key: 'satiety', label: 'Сытость', icon: '🍖' },
+                { key: 'energy', label: 'Бодрость', icon: '💤' },
+                { key: 'coins', label: 'Монеты', icon: '💰' },
+                { key: 'reputation', label: 'Репутация', icon: '👑' }
+            ];
+
+            stats.forEach(s => {
+                const oldVal = window.previousGameState[s.key] || 0;
+                const newVal = gameState[s.key] || 0;
+                const diff = newVal - oldVal;
+
+                // Игнорируем микро-изменения (0) и принудительно показываем значимые
+                if (diff !== 0) {
+                    allEffects.push({
+                        stat: s.key,
+                        delta: diff,
+                        reason: '', // Reason unknown from diff
+                        label: s.label,
+                        icon: s.icon
+                    });
+                }
+            });
+        }
+
+        // 3.2. Эффекты от сервера (от AI, если есть reason)
+        const serverEffects = data.effects || [];
+        // Мержим: если эффект уже есть в diff, берем reason из serverEffects
+        serverEffects.forEach(se => {
+            const existing = allEffects.find(e => e.stat === se.stat);
+            if (existing) {
+                if (se.reason) existing.reason = se.reason;
+            } else {
+                // Если его нет в diff (странно, но бывает), добавляем
+                allEffects.push({
+                    stat: se.stat,
+                    delta: se.delta,
+                    reason: se.reason,
+                    label: se.stat, // Fallback label
+                    icon: '✨'
+                });
+            }
+        });
+
+        // Save current state as previous for next turn
+        window.previousGameState = JSON.parse(JSON.stringify(gameState));
+
+        if (allEffects.length > 0) {
+            let rows = allEffects.map(effect => {
+                const sign = effect.delta > 0 ? '+' : '';
+                const statLabel = effect.label || ({
                     health: 'Здоровье',
                     stamina: 'Выносливость',
                     coins: 'Гроши',
@@ -1041,12 +1094,12 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
                     satiety: 'Сытость',
                     energy: 'Бодрость',
                     timeChange: 'Время'
-                })[e.stat] || e.stat;
-                const reason = e.reason ? `<br><small style="color:#888;">${e.reason}</small>` : '';
+                })[effect.stat] || effect.stat;
+                const reason = effect.reason ? `<br><small style="color:#888;">${effect.reason}</small>` : '';
                 return `<div style="padding:4px 8px; background: rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:8px; font-size:0.85em;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="color:#cfcfcf;">${statLabel}</span>
-                        <span style="color:${e.delta >= 0 ? '#8BC34A' : '#FF9800'}; font-weight:700;">${sign}${e.delta}</span>
+                        <span style="color:#cfcfcf;">${effect.icon || ''} ${statLabel}</span>
+                        <span style="color:${effect.delta >= 0 ? '#8BC34A' : '#FF9800'}; font-weight:700;">${sign}${effect.delta}</span>
                     </div>
                     ${reason}
                 </div>`;
