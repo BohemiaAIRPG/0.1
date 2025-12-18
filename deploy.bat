@@ -42,13 +42,16 @@ if %errorlevel% neq 0 (
     echo.
     echo [!] ОШИБКА: Не привязан удаленный репозиторий.
     echo Введите в терминал команду для привязки:
+    echo git branch -M main
     echo git remote add origin https://github.com/BohemiaAIRPG/0.1.git
-    echo git push -u origin master
+    echo git push -u origin main
     pause
     exit /b
 )
 
-git push
+:: Ensure we are on main branch
+git branch -M main
+git push origin main
 
 echo.
 echo ==========================================
