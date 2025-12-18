@@ -1061,7 +1061,7 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
         }
 
         // 3.2. Эффекты от сервера (от AI, если есть reason)
-        const serverEffects = data.effects || [];
+        const serverEffects = effects || [];
         // Мержим: если эффект уже есть в diff, берем reason из serverEffects
         serverEffects.forEach(se => {
             const existing = allEffects.find(e => e.stat === se.stat);
