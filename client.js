@@ -969,11 +969,14 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
             .replace(/&quot;/g, '"')
             .replace(/&laquo;/g, '«')
             .replace(/&raquo;/g, '»')
+            .replace(/&gt;/g, '>')
+            .replace(/&lt;/g, '<')
+            .replace(/&nbsp;/g, ' ')
             .replace(/<[^>]*>?/gm, ''); // Удаляем технические теги
 
         // 2. Обработка маркеров диалогов "dialogue-speech">
-        // Упрощенный и надежный regex: ищем маркер и захватываем следующий текст в кавычках
-        processedDesc = processedDesc.replace(/(?:["']?dialogue-speech["']?>|&quot;dialogue-speech&quot;&gt;)\s*([«"“].+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
+        // Ищем маркер и захватываем следующий текст в кавычках (включая вложенные)
+        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>\s*([«"“][^]+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
 
         // Удаляем "одинокие" маркеры (на всякий случай)
         processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>/gi, '');
