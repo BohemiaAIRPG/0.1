@@ -845,23 +845,17 @@ function parseAIResponse(text) {
             parsed.skillXP = {};
         }
 
-        // Validate effects (intention → outcome)
-        if (!Array.isArray(parsed.effects)) {
-            parsed.effects = [];
-        } else {
-            const allowedStats = new Set([
-                'health', 'stamina', 'coins', 'reputation', 'morality', 'satiety', 'energy', 'timeChange',
-                'strength', 'agility', 'intelligence', 'charisma'
-            ]);
-            parsed.effects = parsed.effects
-                .filter(e => e && typeof e === 'object')
-                .map(e => ({
-                    stat: typeof e.stat === 'string' ? e.stat : '',
-                    delta: typeof e.delta === 'number' && !Number.isNaN(e.delta) ? e.delta : 0,
-                    reason: typeof e.reason === 'string' ? e.reason : ''
-                }))
-                .filter(e => allowedStats.has(e.stat) && e.delta !== 0)
-                .slice(0, 20);
+        // === EXTRACTION FROM EFFECTS (Fallback) ===
+        // Если AI прислал изменения в effects[], но забыл прописать их в корне JSON - берем из effects
+        if (Array.isArray(parsed.effects)) {
+            parsed.effects.forEach(eff => {
+                const field = eff.stat;
+                // Если в корне нет значения (или оно 0), а в эффектах есть ненулевая дельта
+                if (numericFields.includes(field) && (!parsed[field] || parsed[field] === 0) && eff.delta !== 0) {
+                    parsed[field] = eff.delta;
+                    console.log(`📡 [AUTO-EXTRACT] Извлечено ${field}: ${eff.delta} из массива effects`);
+                }
+            });
         }
 
         // Validate skillCheck (deterministic checks)

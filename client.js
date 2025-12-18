@@ -755,6 +755,12 @@ function handleMessage(data) {
             choicesCount: data.choices?.length
         });
 
+        // 1. Сохраняем предыдущее состояние в отдельный объект перед обновлением
+        if (gameState) {
+            window.previousGameState = JSON.parse(JSON.stringify(gameState));
+        }
+
+        // 2. Обновляем текущее состояние
         gameState = data.gameState;
         currentScene = data.description;
         currentChoices = data.choices;
@@ -971,7 +977,11 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
             .replace(/&raquo;/g, '»')
             .replace(/&nbsp;/g, ' ');
 
-        // (Клиентский парсинг диалогов убран, так как сервер теперь отправляет готовый HTML)
+        // 2. Дополнительная чистка и парсинг диалогов (запасной вариант, если сервер не справился)
+        processedDesc = processedDesc
+            .replace(/["']?dialogue-speech["']?[>:]\s*/gi, '[SPEECH]') // Унификация старых маркеров
+            .replace(/\[SPEECH\]\s*([«"“][^]+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>')
+            .replace(/\[SPEECH\]/gi, ''); // Удаление пустых маркеров
 
         // Разбиваем на абзацы
         let paragraphs = processedDesc.split(/\n+/).filter(p => p.trim());
@@ -1075,8 +1085,7 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
             }
         });
 
-        // Save current state as previous for next turn
-        window.previousGameState = JSON.parse(JSON.stringify(gameState));
+        // (Previous state update moved to handleMessage for better reliability)
 
         if (allEffects.length > 0) {
             let rows = allEffects.map(effect => {
