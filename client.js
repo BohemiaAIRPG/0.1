@@ -964,24 +964,31 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
         }
 
         // 1. Форматирование текста
-        // Очищаем от случайных HTML-тегов из AI и исправляем ошибки экранирования
-        let cleanDescription = (description || '')
+        // Очищаем от мусорных HTML-тегов, но сохраняем маркеры диалогов
+        let processedDesc = (description || '')
             .replace(/&quot;/g, '"')
             .replace(/&laquo;/g, '«')
             .replace(/&raquo;/g, '»')
-            .replace(/<[^>]*>?/gm, '') // Более агрессивное удаление тегов
-            .replace(/"dialogue-speech">/g, '')
-            .replace(/class="[^"]*"/g, '')
-            .trim();
+            .replace(/<[^>]*>?/gm, ''); // Удаляем технические теги
+
+        // 2. Обработка маркеров диалогов "dialogue-speech">
+        // Превращаем маркер в стилизованный спан
+        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>\s*([«"“].+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
+
+        // Удаляем "одинокие" маркеры (на всякий случай)
+        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>/gi, '');
 
         // Разбиваем на абзацы
-        let paragraphs = cleanDescription.split(/\n+/).filter(p => p.trim());
+        let paragraphs = processedDesc.split(/\n+/).filter(p => p.trim());
 
-        // 2. Подсветка прямой речи (курсив + класс)
+        // 3. Дополнительная подсветка оставшейся прямой речи (если маркер забыт)
         paragraphs = paragraphs.map(p => {
-            const text = p.trim()
-                .replace(/«([^»]+)»/g, '<span class="dialogue-speech"><i>«$1»</i></span>')
-                .replace(/"([^"]+)"/g, '<span class="dialogue-speech"><i>"$1"</i></span>');
+            let text = p.trim();
+            // Подсвечиваем только если еще нет тега диалога в этом месте
+            if (!text.includes('class="dialogue-speech"')) {
+                text = text.replace(/«([^»]+)»/g, '<span class="dialogue-speech"><i>«$1»</i></span>')
+                    .replace(/"([^"]+)"/g, '<span class="dialogue-speech"><i>"$1"</i></span>');
+            }
             return `<p class="scene-paragraph">${text}</p>`;
         });
 
