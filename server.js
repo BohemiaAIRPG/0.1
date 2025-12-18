@@ -782,7 +782,6 @@ function parseAIResponse(text) {
 
         // === STRICT NUMERIC VALIDATION ===
         // Ensure all numeric fields are actually numbers, default to 0 if not
-        // Ensure all numeric fields are actually numbers, default to 0 if not
         const numericFields = [
             'health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange', 'satiety', 'energy',
             'strength', 'agility', 'intelligence', 'charisma'
@@ -790,10 +789,18 @@ function parseAIResponse(text) {
         numericFields.forEach(field => {
             if (typeof parsed[field] !== 'number' || isNaN(parsed[field])) {
                 if (parsed[field] !== undefined) {
-                    console.warn(`⚠️ Field '${field}' is not a number: `, parsed[field], '→ Setting to 0');
+                    // console.warn(`⚠️ Field '${field}' is not a number: `, parsed[field], '→ Setting to 0');
                 }
                 parsed[field] = 0;
             }
+        });
+
+        console.log('🔍 [DEBUG] Parsed Stats:', {
+            health: parsed.health,
+            stamina: parsed.stamina,
+            satiety: parsed.satiety,
+            energy: parsed.energy,
+            strength: parsed.strength
         });
 
         // Clamp extreme values to prevent abuse
@@ -1009,10 +1016,14 @@ function applyChanges(gameState, parsed) {
 
     // Применяем изменения характеристик
     if (parsed.health) {
+        const old = gameState.health;
         gameState.health = Math.max(0, Math.min(gameState.maxHealth, gameState.health + parsed.health));
+        console.log(`❤️ Health update: ${old} -> ${gameState.health} (delta: ${parsed.health})`);
     }
     if (parsed.stamina) {
+        const old = gameState.stamina;
         gameState.stamina = Math.max(0, Math.min(gameState.maxStamina, gameState.stamina + parsed.stamina));
+        console.log(`💪 Stamina update: ${old} -> ${gameState.stamina} (delta: ${parsed.stamina})`);
     }
     // Характеристики (Attributes)
     if (parsed.strength) gameState.attributes.strength = clamp(gameState.attributes.strength + parsed.strength, 1, 20);
