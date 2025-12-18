@@ -964,8 +964,6 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
         }
 
         // 1. Форматирование текста
-        // Очищаем от мусорных HTML-тегов, но сохраняем маркеры диалогов
-        // 1. Форматирование текста
         // Очищаем от мусорных символов, но НЕ удаляем HTML теги, так как они приходят с сервера (диалоги)
         let processedDesc = (description || '')
             .replace(/&quot;/g, '"')

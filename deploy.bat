@@ -24,7 +24,8 @@ if %errorlevel% neq 0 (
 
 echo.
 echo [2/4] Adding files to Git...
-git add .
+git add -A
+git status
 
 echo.
 set /p COMMIT_MSG="Enter commit message (press Enter for 'Auto-update'): "

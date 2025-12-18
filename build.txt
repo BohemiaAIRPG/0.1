@@ -1,0 +1,4 @@
+Build Time: 2025-12-18 22:58
+Version: 0.8
+Dialogue System: SPEECH marker integration
+Status: Final Fix

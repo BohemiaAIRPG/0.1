@@ -657,9 +657,9 @@ ${JSON.stringify(context, null, 2)}
 ═══ ПРАВИЛА ИГРЫ (ОБЯЗАТЕЛЬНО) ═══
 1. ОТВЕТ: Только JSON. Русский язык.
 2. ОПИСАНИЕ: Строго 3 небольших абзаца. МАКСИМАЛЬНАЯ детальность (вы/вас). ЛИМИТ: 500 символов.
-3. ПРЯМАЯ РЕЧЬ: Всегда выделяй кавычками «» или "". ПЕРЕД всей конструкцией прямой речи (включая имя говорящего и кавычки) ОБЯЗАТЕЛЬНО ставь маркер "dialogue-speech">. Это сделает всю фразу золотой.
-   Пример: "dialogue-speech">«Помогите мне!» — взываете вы.
-4. ЗАПРЕТ HTML: Не используй теги <p>, <span>. Используй только маркер "dialogue-speech"> для речи.
+3. ПРЯМАЯ РЕЧЬ: Всегда выделяй кавычками «» или "". ПЕРЕД всей конструкцией прямой речи (включая имя говорящего и кавычки) ОБЯЗАТЕЛЬНО ставь простой маркер [SPEECH]. Это сделает всю фразу золотой.
+   Пример: [SPEECH]«Помогите мне!» — взываете вы.
+4. ЗАПРЕТ HTML: Не используй теги <p>, <span>. Используй только маркер [SPEECH] для речи.
 5. ЭКИПИРОВКА: Если игрок надевает предмет (даже "Лохмотья" или "Тряпье"), ОБЯЗАТЕЛЬНО обнови поле "newEquipment.armor". Если берет меч — "newEquipment.weapon".
 6. ПРЕДМЕТЫ: Если персонаж получил предмет, добавь его в "newItems". Если использовал/потерял — в "usedItems".
 7. СТАТЫ И АТРИБУТЫ: Возвращай только дельты (изменения). 0 — если нет причины менять.
@@ -1575,10 +1575,12 @@ function applyChanges(gameState, parsed) {
 }
 
 // Helper to format description on server side
+// Helper to format description on server side
 function formatDescription(text) {
     if (!text) return '';
     let processed = text;
-    // 1. Decode entities
+
+    // 1. Декодирование (на всякий случай)
     processed = processed
         .replace(/&quot;/g, '"')
         .replace(/&laquo;/g, '«')
@@ -1587,18 +1589,17 @@ function formatDescription(text) {
         .replace(/&lt;/g, '<')
         .replace(/&nbsp;/g, ' ');
 
-    // 2. Format Dialogue (Simpler Loop)
-    // Keep replacing until no matches found (to handle multiple dialogues)
-    const regex = /["'„“]?dialogue-speech["'”]?\s*>\s*([«"“][^]+?[»"”])/i;
-    let match;
-    let loopCount = 0;
-    while ((match = regex.exec(processed)) !== null && loopCount < 10) {
-        processed = processed.replace(match[0], `<span class="dialogue-speech"><i>${match[1]}</i></span>`);
-        loopCount++;
-    }
+    // 2. Унификация: превращаем любые вариации диалогов-маркеров в [SPEECH]
+    processed = processed.replace(/["']?dialogue-speech["']?>\s*/gi, '[SPEECH]');
 
-    // 3. Cleanup loose markers
-    processed = processed.replace(/["'„“]?dialogue-speech["'”]?\s*>/gi, '');
+    // 3. Форматирование [SPEECH]«...» в HTML
+    const speechRegex = /\[SPEECH\]\s*([«"“][^]+?[»"”])/gi;
+    processed = processed.replace(speechRegex, (match, quote) => {
+        return `<span class="dialogue-speech"><i>${quote}</i></span>`;
+    });
+
+    // 4. Очистка "остатков" (если маркер есть, а кавычек нет)
+    processed = processed.replace(/\[SPEECH\]/gi, '');
 
     return processed;
 }
@@ -1629,13 +1630,13 @@ wss.on('connection', (ws) => {
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голая и избитая. Тело покрыто ссадинами и грязью.' :
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голый и избитый. Тело покрыто ссадинами и грязью.';
 
-                const introText = `${genderDesc} Пытаясь сфокусировать взгляд, вы видите деревянные дома с соломенными крышами, повозки, толпу людей в грубой средневековой одежде. Они останавливаются, показывают на вас пальцем. <span class="dialogue-speech"><i>«Смотрите, еще один бродяга!»</i></span>`;
+                const introText = `[v0.8] ${genderDesc} Пытаясь сфокусировать взгляд, вы видите деревянные дома с соломенными крышами, повозки, толпу людей в грубой средневековой одежде. Они останавливаются, показывают на вас пальцем. [SPEECH]«Смотрите, еще один бродяга!»`;
 
                 ws.send(JSON.stringify({
                     type: 'scene',
                     sessionId,
                     gameState,
-                    description: introText, // Прямая отправка (HTML уже внутри)
+                    description: formatDescription(introText), // Теперь через форматтер
                     choices: [
                         'Попытаться прикрыться руками и попросить помощи у прохожих',
                         'Быстро подняться и забежать в ближайший переулок',
