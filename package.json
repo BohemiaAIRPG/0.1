@@ -1,0 +1,22 @@
+{
+  "name": "bohemia-airpg",
+  "version": "1.0.0",
+  "description": "Hardcore medieval RPG with AI storytelling",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "rpg",
+    "ai",
+    "game",
+    "medieval"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.18.3",
+    "dotenv": "^16.4.7"
+  }
+}

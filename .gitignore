@@ -1,0 +1,8 @@
+node_modules/
+saves/
+*.log
+.env
+.DS_Store
+deployment/
+0.2.zip
+old_0_2/
