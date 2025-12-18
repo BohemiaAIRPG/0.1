@@ -657,12 +657,15 @@ ${JSON.stringify(context, null, 2)}
 ═══ ПРАВИЛА ИГРЫ (ОБЯЗАТЕЛЬНО) ═══
 1. ОТВЕТ: Только JSON. Русский язык.
 2. ОПИСАНИЕ: Строго 3 небольших абзаца. МАКСИМАЛЬНАЯ детальность (вы/вас).
-3. ПРЯМАЯ РЕЧЬ: Всегда выделяй кавычками «» или "". ПЕРЕД каждой фразой персонажа ОБЯЗАТЕЛЬНО ставь маркер "dialogue-speech">. Это важно для подсветки!
+3. ПРЯМАЯ РЕЧЬ: Всегда выделяй кавычками «» или "". ПЕРЕД всей конструкцией прямой речи (включая имя говорящего и кавычки) ОБЯЗАТЕЛЬНО ставь маркер "dialogue-speech">. Это сделает всю фразу золотой.
    Пример: "dialogue-speech">«Помогите мне!» — взываете вы.
 4. ЗАПРЕТ HTML: Не используй теги <p>, <span>. Используй только маркер "dialogue-speech"> для речи.
 5. ЭКИПИРОВКА: Если игрок надевает предмет (даже "Лохмотья" или "Тряпье"), ОБЯЗАТЕЛЬНО обнови поле "newEquipment.armor". Если берет меч — "newEquipment.weapon".
 6. ПРЕДМЕТЫ: Если персонаж получил предмет, добавь его в "newItems". Если использовал/потерял — в "usedItems".
-7. СТАТЫ: Возвращай только дельты (изменения). 0 — если нет причины менять.
+7. СТАТЫ И АТРИБУТЫ: Возвращай только дельты (изменения). 0 — если нет причины менять.
+   - СТАТЫ: health, stamina, satiety, energy, coins, reputation, morality.
+   - АТРИБУТЫ: strength, agility, intelligence, charisma.
+   - Используй атрибуты для поощрения усилий! Пример: если игрок долго бежал с грузом, можно дать strength: 1.
 8. СМЕРТЬ: Если (здоровье + дельта health) <= 0 -> gameOver: true, deathReason: "причина".
 
 ⚠️ КРИТИЧЕСКИ ВАЖНО: Нейросеть часто забывает обновлять "newEquipment", когда игрок надевает одежду в описании. НЕ ЗАБЫВАЙ ЭТО. Если одежда на персонаже — она должна быть в слоте armor.`;
@@ -779,7 +782,11 @@ function parseAIResponse(text) {
 
         // === STRICT NUMERIC VALIDATION ===
         // Ensure all numeric fields are actually numbers, default to 0 if not
-        const numericFields = ['health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange', 'satiety', 'energy'];
+        // Ensure all numeric fields are actually numbers, default to 0 if not
+        const numericFields = [
+            'health', 'stamina', 'coins', 'reputation', 'morality', 'timeChange', 'satiety', 'energy',
+            'strength', 'agility', 'intelligence', 'charisma'
+        ];
         numericFields.forEach(field => {
             if (typeof parsed[field] !== 'number' || isNaN(parsed[field])) {
                 if (parsed[field] !== undefined) {
@@ -815,7 +822,10 @@ function parseAIResponse(text) {
         if (!Array.isArray(parsed.effects)) {
             parsed.effects = [];
         } else {
-            const allowedStats = new Set(['health', 'stamina', 'coins', 'reputation', 'morality', 'satiety', 'energy', 'timeChange']);
+            const allowedStats = new Set([
+                'health', 'stamina', 'coins', 'reputation', 'morality', 'satiety', 'energy', 'timeChange',
+                'strength', 'agility', 'intelligence', 'charisma'
+            ]);
             parsed.effects = parsed.effects
                 .filter(e => e && typeof e === 'object')
                 .map(e => ({
@@ -1004,6 +1014,12 @@ function applyChanges(gameState, parsed) {
     if (parsed.stamina) {
         gameState.stamina = Math.max(0, Math.min(gameState.maxStamina, gameState.stamina + parsed.stamina));
     }
+    // Характеристики (Attributes)
+    if (parsed.strength) gameState.attributes.strength = clamp(gameState.attributes.strength + parsed.strength, 1, 20);
+    if (parsed.agility) gameState.attributes.agility = clamp(gameState.attributes.agility + parsed.agility, 1, 20);
+    if (parsed.intelligence) gameState.attributes.intelligence = clamp(gameState.attributes.intelligence + parsed.intelligence, 1, 20);
+    if (parsed.charisma) gameState.attributes.charisma = clamp(gameState.attributes.charisma + parsed.charisma, 1, 20);
+
     // Монеты: Grok возвращает ИЗМЕНЕНИЕ (дельту), игра сама прибавляет/убирает
     if (parsed.coins !== undefined && parsed.coins !== null) {
         const oldCoins = gameState.coins;
@@ -1399,16 +1415,18 @@ function applyChanges(gameState, parsed) {
 
     // 3. Logic Hardening (Prevent AI Hallucinations)
     // Guard: Cannot gain Satiety (>0) without using items (eating)
-    if (parsed.satiety > 0) {
+    // Relaxed: Allow minor satiety increase or if AI gives a strong reason. Mostly prevent massive (+20) phantom gains.
+    if (parsed.satiety > 5) {
         if (!parsed.usedItems || parsed.usedItems.length === 0) {
             console.warn(`🚫 Prevented phantom Satiety increase(+${parsed.satiety}) - No items used!`);
             parsed.satiety = 0;
         }
     }
 
-    // Guard: Cannot gain major Energy (>5) without significant time passage (>=1 hour)
+    // Guard: Energy can decrease naturally or from effort. Increase only from sleep/rest.
     if (parsed.energy > 5) {
         if (!parsed.timeChange || parsed.timeChange < 1) {
+            // If energy increases more than 5, we usually expect time to pass (rest)
             console.warn(`🚫 Prevented phantom Energy increase(+${parsed.energy}) - No time passed!`);
             parsed.energy = 0;
         }

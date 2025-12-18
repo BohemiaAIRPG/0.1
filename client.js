@@ -972,8 +972,8 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
             .replace(/<[^>]*>?/gm, ''); // Удаляем технические теги
 
         // 2. Обработка маркеров диалогов "dialogue-speech">
-        // Превращаем маркер в стилизованный спан
-        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>\s*([«"“].+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
+        // Превращаем маркер в стилизованный спан (поддерживаем один уровень вложенности кавычек)
+        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>\s*([«"“](?:[^«"”]|(?:[«"“][^«"”]*[»"”]))*?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
 
         // Удаляем "одинокие" маркеры (на всякий случай)
         processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>/gi, '');
