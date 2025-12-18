@@ -965,24 +965,19 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
 
         // 1. Форматирование текста
         // Очищаем от мусорных HTML-тегов, но сохраняем маркеры диалогов
+        // 1. Форматирование текста
+        // Очищаем от мусорных символов, но НЕ удаляем HTML теги, так как они приходят с сервера (диалоги)
         let processedDesc = (description || '')
             .replace(/&quot;/g, '"')
             .replace(/&laquo;/g, '«')
             .replace(/&raquo;/g, '»')
-            .replace(/&gt;/g, '>')
-            .replace(/&lt;/g, '<')
-            .replace(/&nbsp;/g, ' ')
-            .replace(/<[^>]*>?/gm, ''); // Удаляем технические теги
+            .replace(/&nbsp;/g, ' ');
 
-        // 2. Обработка маркеров диалогов "dialogue-speech">
-        // Ищем маркер и захватываем следующий текст в кавычках (включая вложенные)
-        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>\s*([«"“][^]+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
-
-        // Удаляем "одинокие" маркеры (на всякий случай)
-        processedDesc = processedDesc.replace(/["']?dialogue-speech["']?>/gi, '');
+        // (Клиентский парсинг диалогов убран, так как сервер теперь отправляет готовый HTML)
 
         // Разбиваем на абзацы
         let paragraphs = processedDesc.split(/\n+/).filter(p => p.trim());
+
 
         // 3. Дополнительная подсветка оставшейся прямой речи (если маркер забыт)
         paragraphs = paragraphs.map(p => {

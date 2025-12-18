@@ -1587,11 +1587,17 @@ function formatDescription(text) {
         .replace(/&lt;/g, '<')
         .replace(/&nbsp;/g, ' ');
 
-    // 2. Format Dialogue (Aggressive Regex)
-    // Matches: marker (optional quotes) > whitespace "Quote..."
-    processed = processed.replace(/["'„“]?dialogue-speech["'”]?\s*>\s*([«"“][^]+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>');
+    // 2. Format Dialogue (Simpler Loop)
+    // Keep replacing until no matches found (to handle multiple dialogues)
+    const regex = /["'„“]?dialogue-speech["'”]?\s*>\s*([«"“][^]+?[»"”])/i;
+    let match;
+    let loopCount = 0;
+    while ((match = regex.exec(processed)) !== null && loopCount < 10) {
+        processed = processed.replace(match[0], `<span class="dialogue-speech"><i>${match[1]}</i></span>`);
+        loopCount++;
+    }
 
-    // 3. Cleanup leftover markers
+    // 3. Cleanup loose markers
     processed = processed.replace(/["'„“]?dialogue-speech["'”]?\s*>/gi, '');
 
     return processed;
@@ -1623,13 +1629,13 @@ wss.on('connection', (ws) => {
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голая и избитая. Тело покрыто ссадинами и грязью.' :
                     'Резкая боль пронзает всё тело. Вы медленно открываете глаза - перед вами грязная мостовая, лужи, конский навоз. Голова раскалывается. Вы лежите прямо на улице средневекового города, полностью голый и избитый. Тело покрыто ссадинами и грязью.';
 
-                const introText = `${genderDesc} Пытаясь сфокусировать взгляд, вы видите деревянные дома с соломенными крышами, повозки, толпу людей в грубой средневековой одежде. Они останавливаются, показывают на вас пальцем. "dialogue-speech">«Смотрите, еще один бродяга!»`;
+                const introText = `${genderDesc} Пытаясь сфокусировать взгляд, вы видите деревянные дома с соломенными крышами, повозки, толпу людей в грубой средневековой одежде. Они останавливаются, показывают на вас пальцем. <span class="dialogue-speech"><i>«Смотрите, еще один бродяга!»</i></span>`;
 
                 ws.send(JSON.stringify({
                     type: 'scene',
                     sessionId,
                     gameState,
-                    description: formatDescription(introText),
+                    description: introText, // Прямая отправка (HTML уже внутри)
                     choices: [
                         'Попытаться прикрыться руками и попросить помощи у прохожих',
                         'Быстро подняться и забежать в ближайший переулок',
