@@ -1027,9 +1027,8 @@ function displayScene(description, choices, isDialogue = false, speakerName = ''
 
         // 2. Дополнительная чистка и парсинг диалогов (запасной вариант, если сервер не справился)
         processedDesc = processedDesc
-            .replace(/["']?dialogue-speech["']?[>:]\s*/gi, '[SPEECH]') // Унификация старых маркеров
-            .replace(/\[SPEECH\]\s*([«"“][^]+?[»"”])/gi, '<span class="dialogue-speech"><i>$1</i></span>')
-            .replace(/\[SPEECH\]/gi, ''); // Удаление пустых маркеров
+        // 2. (Удален легаси-код парсинга диалогов, так как сервер теперь присылает готовый HTML)
+        // processedDesc = processedDesc...
 
         // Разбиваем на абзацы
         let paragraphs = processedDesc.split(/\n+/).filter(p => p.trim());

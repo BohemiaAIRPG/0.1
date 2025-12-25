@@ -156,7 +156,56 @@ ${previousScene}
 `;
 }
 
+// Helper to extract JSON by balancing brackets
+function extractJsonBlock(text) {
+    let startIndex = text.indexOf('{');
+    if (startIndex === -1) return null;
+
+    let braceCount = 0;
+    let inString = false;
+    let escaped = false;
+
+    // We only care about the outer block
+    for (let i = startIndex; i < text.length; i++) {
+        const char = text[i];
+
+        if (inString) {
+            if (char === '\\' && !escaped) {
+                escaped = true;
+            } else if (char === '"' && !escaped) {
+                inString = false;
+            } else {
+                escaped = false;
+            }
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+            continue;
+        }
+
+        if (char === '{') {
+            braceCount++;
+        } else if (char === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+                // Found the closing brace of the root object
+                return text.substring(startIndex, i + 1);
+            }
+        }
+    }
+    // If we're here, braces didn't balance (likely incomplete or malformed)
+    // Fallback: Try regex aggressive match
+    return null;
+}
+
 export function parseAIResponse(text) {
+    // 0. DEBUG LOG
+    console.log('\n\n🔍 ========== [DEBUG] RAW AI RESPONSE START ==========');
+    console.log(text);
+    console.log('🔍 ========== [DEBUG] RAW AI RESPONSE END ============\n');
+
     try {
         // 1. Предварительная очистка (удаляем Markdown блоки)
         let cleaned = text
@@ -164,21 +213,30 @@ export function parseAIResponse(text) {
             .replace(/```/g, '')
             .trim();
 
-        // 2. Поиск JSON объекта
-        const jsonMatch = cleaned.replace(/\r/g, '').match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
+        // 2. Попытка извлечь JSON через баланс скобок (надежнее regex)
+        let jsonStr = extractJsonBlock(cleaned);
+
+        // Fallback на Regex, если баланс не сошелся
+        if (!jsonStr) {
+            const jsonMatch = cleaned.replace(/\r/g, '').match(/\{[\s\S]*\}/);
+            if (jsonMatch) jsonStr = jsonMatch[0];
+        }
+
+        if (!jsonStr) {
             throw new Error('JSON object not found in response');
         }
 
-        cleaned = jsonMatch[0]
-            // .replace(/\/\/.*$/gm, '') // DANGEROUS: Breaks links/text with // - REMOVED
+        // 3. Чистка внутри JSON строки
+        jsonStr = jsonStr
             .replace(/,\s*}/g, '}')   // Remove trailing commas
             .replace(/,\s*]/g, ']')
             .replace(/\\"(\w+)\\"/g, '"$1"') // Fix: \"key\" -> "key"
             .replace(/:(\s*)\+(\d)/g, ':$1$2') // Fix: :+10 → :10
             .trim();
 
-        const parsed = JSON.parse(cleaned);
+        console.log('🧹 Cleaned JSON string:', jsonStr.substring(0, 100) + '...');
+
+        const parsed = JSON.parse(jsonStr);
 
         // === STRICT SCHEMA NORMALIZATION (drop unknown keys, coerce types, defaults) ===
         const allowedKeys = new Set([
@@ -246,7 +304,8 @@ export function parseAIResponse(text) {
 
     } catch (error) {
         console.error('❌ Parse error! Raw text:', text);
-        error.message = `Failed to parse AI response: ${error.message} `;
+        console.error('❌ Parse error details:', error.message);
+        error.message = `Failed to parse AI response: ${error.message}`;
         throw error;
     }
 }
