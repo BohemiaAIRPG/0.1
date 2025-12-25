@@ -6,6 +6,54 @@ let currentSessionId = null;
 let lastEffects = [];
 let lastCheckResult = null;
 
+// === MOBILE NAV ===
+const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+if (mobileMenuBtn) {
+    mobileMenuBtn.onclick = () => {
+        // Toggle right panel as a modal or just simple menu
+        // For now, let's just use it to toggle History as a placeholder or show a custom menu
+        // Simpler: Trigger Escape menu or Show Action Panel
+        // Let's reuse Character Modal for now or verify specific buttons
+        document.querySelector('.quest-panel').classList.toggle('hidden'); // Hacky toggle?
+        // Better: Show History
+        document.getElementById('historyModal').classList.remove('hidden');
+    };
+}
+const mobileInvBtn = document.getElementById('mobileInvBtn');
+if (mobileInvBtn) {
+    mobileInvBtn.onclick = () => {
+        updateInventoryUI(); // Ensure fresh data
+        document.getElementById('inventoryModal').classList.remove('hidden');
+    }
+}
+const mobileCharBtn = document.getElementById('mobileCharBtn');
+if (mobileCharBtn) {
+    mobileCharBtn.onclick = () => {
+        // Map stats to modal
+        const info = document.getElementById('characterInfo');
+        // Populate basic info
+        info.innerHTML = `
+                <div style="text-align: center">
+                   <h2>${document.getElementById('charName').innerText}</h2>
+                   <p>${document.getElementById('location').innerText}</p>
+                   <hr style="margin: 10px 0; border: 0; border-top: 1px solid #444;">
+                   <p>Здоровье: ${document.getElementById('healthText').innerText}</p>
+                   <p>Деньги: ${document.getElementById('coins').innerText}</p>
+                   <p>Репутация: ${document.getElementById('reputation').innerText}</p>
+                </div>
+             `;
+        document.getElementById('characterModal').classList.remove('hidden');
+    }
+}
+const mobileMapBtn = document.getElementById('mobileMapBtn');
+if (mobileMapBtn) {
+    mobileMapBtn.onclick = () => {
+        document.getElementById('mapModal').classList.remove('hidden');
+        drawMap();
+    }
+}
+
+// === KEYBOARD SHORTCUTS ===
 // === GLOBAL ERROR HANDLERS ===
 // Catch any unhandled errors and log them instead of crashing
 window.onerror = function (message, source, lineno, colno, error) {
