@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bohemia AI RPG</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400..900&family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Character Creation Overlay -->
+        <div id="character-creation-overlay" class="character-creation-overlay">
+            <div class="creation-modal glass">
+                <h2>Кто вы в этом мире?</h2>
+                <p class="creation-desc">Вам предстоит выживать в суровой Богемии 1403 года. Назовите себя.</p>
+
+                <div class="form-group">
+                    <label for="char-name">Как вас зовут?</label>
+                    <input type="text" id="char-name" autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label>Пол:</label>
+                    <div class="gender-options">
+                        <label class="radio-label"><input type="radio" name="char-gender" value="Мужчина" checked>
+                            Мужчина</label>
+                        <label class="radio-label"><input type="radio" name="char-gender" value="Женщина">
+                            Женщина</label>
+                        <label class="radio-label"><input type="radio" name="char-gender" value="Другое"> Другое</label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="char-age">Ваш возраст (лет):</label>
+                    <input type="number" id="char-age" value="25" min="14" max="120">
+                </div>
+
+                <div id="creation-error" class="creation-error" style="display: none;"></div>
+
+                <button id="btn-start-game" class="action-btn primary-btn">Начать выживание</button>
+            </div>
+
+            <div class="creation-side-actions">
+                <button id="btn-load-overlay" class="action-btn" title="Загрузить сохраненную игру"
+                    style="height: 100%;">
+                    📂 Загрузить игру
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Overlay -->
+        <div id="game-over-overlay" class="game-over-overlay" style="display: none;">
+            <div class="game-over-modal glass">
+                <h2>ВЫ ПОГИБЛИ</h2>
+                <p class="game-over-desc">Суровая Богемия не прощает ошибок. Ваш путь окончен.</p>
+                <button id="btn-restart-game" class="action-btn primary-btn"
+                    style="background: rgba(239, 68, 68, 0.2); border-color: #ef4444; color: #ef4444;">Начать
+                    заново</button>
+            </div>
+        </div>
+
+        <header class="top-bar glass">
+            <h1 class="logo">Bohemia AIRPG</h1>
+            <div class="header-stats">
+                <span id="loc-display">Загрузка...</span>
+                <span id="time-display">--:--</span>
+            </div>
+            <div class="header-actions" style="position: relative;">
+                <button id="btn-save" class="action-btn" title="Сохранить Игру">💾 Сохранить</button>
+                <button id="btn-load" class="action-btn" title="Загрузить Игру">📂 Загрузить</button>
+                <button id="btn-settings" class="action-btn" title="Настройки">⚙️</button>
+
+                <!-- Settings Dropdown -->
+                <div id="settings-menu" class="settings-dropdown glass" style="display: none;">
+                    <div class="setting-row">
+                        <label for="narrative-length">Длина текста:</label>
+                        <select id="narrative-length" class="settings-select">
+                            <option value="short">Короче</option>
+                            <option value="long" selected>Подробнее</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="header-currency" title="Пражские гроши">
+                <span class="coin-icon">🪙</span> <span id="coins">0</span> гр.
+            </div>
+        </header>
+
+        <main class="main-container">
+            <!-- Central Play Area: Narrative & Input -->
+            <section class="narrative-panel">
+                <!-- Картинка сцены (генерируется с каждым ходом). Временно скрыта, удалите style="display: none;" чтобы вернуть -->
+                <div id="scene-image-container" class="scene-image-container" style="display: none;"></div>
+
+                <div id="chat-log" class="chat-log">
+                    <div class="loading-indicator" id="loading">Пробуждение в грязи...</div>
+                </div>
+
+                <div class="hybrid-input-area">
+                    <div class="ai-choices-container glass" id="ai-choices-container">
+                        <div class="choices-header" id="choices-header" title="Показать/скрыть действия">
+                            <div class="choices-title">Возможные действия:</div>
+                            <svg class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </div>
+                        <div id="ai-choices" class="ai-choices collapsed">
+                            <!-- Buttons injected here by JS -->
+                        </div>
+                    </div>
+
+                    <div class="manual-input-box">
+                        <textarea id="action-input" placeholder="Что вы будете делать?" rows="1"></textarea>
+                        <button id="send-btn" title="Совершить действие">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Container for floating stat animations -->
+                <div id="stat-popup-container" class="stat-popup-container"></div>
+            </section>
+
+            <!-- Right Panel: Tabs -->
+            <aside class="state-panel glass">
+                <div class="tabs-nav">
+                    <button class="tab-btn active" data-target="tab-character">Персонаж</button>
+                    <button class="tab-btn" data-target="tab-skills">Навыки</button>
+                    <button class="tab-btn" data-target="tab-inventory">Инвентарь</button>
+                    <button class="tab-btn" data-target="tab-quests">Квесты</button>
+                    <button class="tab-btn" data-target="tab-relationships">Связи</button>
+                </div>
+
+                <div class="tabs-content">
+                    <!-- Character Tab -->
+                    <div id="tab-character" class="tab-pane active">
+                        <div class="stat-block">
+                            <label>Здоровье</label>
+                            <div class="progress-bar health">
+                                <div id="hp-fill" class="fill" style="width: 100%;"></div>
+                                <span id="hp-text">100/100</span>
+                            </div>
+                        </div>
+                        <div class="stat-block">
+                            <label>Выносливость</label>
+                            <div class="progress-bar stamina">
+                                <div id="stamina-fill" class="fill" style="width: 100%;"></div>
+                                <span id="stamina-text">100/100</span>
+                            </div>
+                        </div>
+
+                        <div class="stat-block">
+                            <label>Сытость</label>
+                            <div class="progress-bar satiety">
+                                <div id="satiety-fill" class="fill" style="width: 80%;"></div>
+                                <span id="satiety-text">80/100</span>
+                            </div>
+                        </div>
+
+                        <div class="stat-block">
+                            <label>Мораль (Рассудок)</label>
+                            <div class="progress-bar morality">
+                                <div id="mor-fill" class="fill" style="width: 50%;"></div>
+                                <span id="mor-text">50/100</span>
+                            </div>
+                        </div>
+
+                        <div class="minor-stats">
+                            <div>Репутация: <span id="reputation" class="highlight">0</span></div>
+                        </div>
+
+                        <div class="equipment-section">
+                            <h3>Надето на вас:</h3>
+                            <ul class="equipment-list">
+                                <li>
+                                    <div class="eq-slot">Оружие</div>
+                                    <div class="eq-item" id="weapon-display">Нет</div>
+                                </li>
+                                <li>
+                                    <div class="eq-slot">Тело</div>
+                                    <div class="eq-item" id="armor-display">Лохмотья</div>
+                                </li>
+                                <li class="profession-row">
+                                    <div class="eq-slot">Промысел</div>
+                                    <div class="eq-item" id="profession-display">Нет</div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Skills Tab -->
+                    <div id="tab-skills" class="tab-pane">
+                        <div class="skills-grid" id="skills-list">
+                            <!-- Skills injected here by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Inventory Tab -->
+                    <div id="tab-inventory" class="tab-pane">
+                        <div class="inventory-grid" id="inventory-list">
+                            <!-- Items injected here by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Quests Tab -->
+                    <div id="tab-quests" class="tab-pane">
+                        <ul id="quests-list" class="rel-list quest-list">
+                            <li class="empty-state">Пока у вас нет долгов или работы...</li>
+                        </ul>
+                    </div>
+
+                    <!-- Relationships Tab -->
+                    <div id="tab-relationships" class="tab-pane">
+                        <ul id="relationships-list" class="rel-list">
+                            <li class="empty-state">Нет знакомых лиц в этом проклятом городе...</li>
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Dev mode view of the shortcode -->
+        <div class="shortcode-tracker" id="dev-panel">
+            <code><pre id="shortcode-display">Ожидание...</pre></code>
+        </div>
+
+        <button id="toggle-dev-btn" class="dev-toggle" title="Режим Мастера (GM)">👁️ GM</button>
+    </div>
+    <input type="file" id="load-file-input" accept=".json" style="display: none;">
+    <script src="app.js"></script>
+</body>
+
+</html>

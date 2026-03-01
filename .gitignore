@@ -1,0 +1,7 @@
+node_modules/
+WebUI_Forge_cu121_torch231/
+*.7z
+.env
+*.log
+ai_log.txt
+webui/
