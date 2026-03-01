@@ -36,6 +36,32 @@ export class GameState {
     fromJSON(data) {
         if (!data) return;
         Object.assign(this, data);
+
+        // Backwards compatibility for old save files that didn't explicitly store lastNarrative/lastChoices
+        if (!this.lastNarrative && this.dialogueContext && this.dialogueContext.length > 0) {
+            // Find the last assistant message
+            for (let i = this.dialogueContext.length - 1; i >= 0; i--) {
+                if (this.dialogueContext[i].role === 'assistant') {
+                    const content = this.dialogueContext[i].content;
+
+                    const narrativeMatch = content.match(/\[NARRATIVE\]([\s\S]*?)\[\/NARRATIVE\]/);
+                    const choicesMatch = content.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
+
+                    if (narrativeMatch) {
+                        this.lastNarrative = narrativeMatch[1].trim();
+                    }
+
+                    if (choicesMatch) {
+                        try {
+                            this.lastChoices = JSON.parse(choicesMatch[1].trim());
+                        } catch (e) {
+                            console.warn("Could not parse choices JSON from old save", e);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
     }
 
     // Генерация сжатого Short Code
