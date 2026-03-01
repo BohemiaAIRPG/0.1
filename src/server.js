@@ -31,6 +31,26 @@ wss.on('connection', (ws) => {
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
+
+            if (data.type === 'reconnect') {
+                if (data.sessionId && sessions.has(data.sessionId)) {
+                    sessionId = data.sessionId; // Восстанавливаем старый ID сессии
+                    const state = sessions.get(sessionId);
+                    ws.send(JSON.stringify({
+                        type: 'update',
+                        state: state,
+                        shortCode: state.toShortCode(),
+                        message: state.lastNarrative || 'Вы оглядываетесь вокруг...',
+                        choices: state.lastChoices || [],
+                        sessionId: sessionId
+                    }));
+                } else {
+                    // Сессия не найдена на сервере (например после перезапуска)
+                    ws.send(JSON.stringify({ type: 'reconnect_failed' }));
+                }
+                return;
+            }
+
             const state = sessions.get(sessionId);
 
             if (data.type === 'init_character') {
@@ -54,7 +74,8 @@ wss.on('connection', (ws) => {
                     state: state,
                     shortCode: state.toShortCode(),
                     message: narrative,
-                    choices: choices
+                    choices: choices,
+                    sessionId: sessionId
                 }));
 
                 const ENABLE_IMAGES = false; // ВРЕМЕННО ОТКЛЮЧЕНО
@@ -105,7 +126,8 @@ wss.on('connection', (ws) => {
                     state: state,
                     shortCode: state.toShortCode(),
                     message: narrative,
-                    choices: choices
+                    choices: choices,
+                    sessionId: sessionId
                 };
 
                 // Отправляем текстовый ответ МГНОВЕННО
@@ -143,7 +165,8 @@ wss.on('connection', (ws) => {
                         state: state,
                         shortCode: state.toShortCode(),
                         message: state.lastNarrative || 'Игра успешно загружена. Вы осматриваетесь вокруг...',
-                        choices: state.lastChoices || []
+                        choices: state.lastChoices || [],
+                        sessionId: sessionId
                     }));
                 }
             } else if (data.type === 'set_narrative_length') {

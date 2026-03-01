@@ -4,6 +4,13 @@ let ws;
 function connectWebSocket() {
     ws = new WebSocket(`${wsProtocol}//${location.host}`);
 
+    ws.onopen = () => {
+        const savedSessionId = localStorage.getItem('rpg_session_id');
+        if (savedSessionId) {
+            ws.send(JSON.stringify({ type: 'reconnect', sessionId: savedSessionId }));
+        }
+    };
+
     ws.onmessage = handleMessage;
 
     ws.onclose = () => {
@@ -15,10 +22,6 @@ function connectWebSocket() {
         console.error('WebSocket error:', err);
         ws.close();
     };
-
-    // If reconnecting and we have a session, we should request a resync, but for now
-    // just reconnecting ensures we can send commands again. If the server restarted,
-    // the session is lost anyway. If just the browser tab suspended, the connection drops.
 }
 
 connectWebSocket();
@@ -145,6 +148,14 @@ if (btnStartGame) {
     });
 }
 
+// Clear session if user clicks restart game
+if (btnRestartGame) {
+    btnRestartGame.addEventListener('click', () => {
+        localStorage.removeItem('rpg_session_id');
+        location.reload();
+    });
+}
+
 // State tracking for animations
 let prevStats = null;
 
@@ -188,6 +199,10 @@ function handleMessage(event) {
             actionInput.disabled = false;
             sendBtn.disabled = false;
             actionInput.focus();
+
+            if (data.sessionId) {
+                localStorage.setItem('rpg_session_id', data.sessionId);
+            }
 
             // Clear previous screen for a page-turn effect
             chatLog.innerHTML = '';
@@ -253,6 +268,12 @@ function handleMessage(event) {
             chatLog.appendChild(loading);
             chatLog.scrollTop = chatLog.scrollHeight;
             aiChoicesContainer.classList.remove('visible');
+        }
+        else if (data.type === 'reconnect_failed') {
+            // Если сервер перезагружался (сессия пропала из памяти), нужно просто сбросить всё и показать главное меню
+            localStorage.removeItem('rpg_session_id');
+            const overlay = document.getElementById('character-creation-overlay');
+            if (overlay) overlay.style.display = 'flex';
         }
         else if (data.type === 'image_update') {
             // Асинхронно пришла картинка
