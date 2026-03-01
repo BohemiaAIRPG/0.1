@@ -46,6 +46,9 @@ wss.on('connection', (ws) => {
 
                 if (newShortCode) state.updateFromShortCode(newShortCode);
 
+                state.lastNarrative = narrative;
+                state.lastChoices = choices;
+
                 ws.send(JSON.stringify({
                     type: 'init',
                     state: state,
