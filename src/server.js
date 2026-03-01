@@ -94,6 +94,9 @@ wss.on('connection', (ws) => {
                     state.applyNarrativeDeltas(narrative, oldState);
                 }
 
+                state.lastNarrative = narrative;
+                state.lastChoices = choices;
+
                 const outData = {
                     type: 'update',
                     state: state,
@@ -136,8 +139,8 @@ wss.on('connection', (ws) => {
                         type: 'update',
                         state: state,
                         shortCode: state.toShortCode(),
-                        message: 'Игра успешно загружена. Вы осматриваетесь вокруг...',
-                        choices: []
+                        message: state.lastNarrative || 'Игра успешно загружена. Вы осматриваетесь вокруг...',
+                        choices: state.lastChoices || []
                     }));
                 }
             } else if (data.type === 'set_narrative_length') {

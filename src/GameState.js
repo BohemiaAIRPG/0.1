@@ -28,6 +28,8 @@ export class GameState {
         this.history = ["очнулся_в_грязи", "амнезия"];
         this.quests = {}; // Format: { "Quest Name": { status: "active"|"completed"|"failed", startTime: "День 1, 09:00", endTime: null } }
         this.narrativeLength = "long"; // default "long", can be "short"
+        this.lastNarrative = "";
+        this.lastChoices = [];
     }
 
     // Восстановление состояния из JSON объекта

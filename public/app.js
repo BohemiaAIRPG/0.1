@@ -1,5 +1,27 @@
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const ws = new WebSocket(`${wsProtocol}//${location.host}`);
+let ws;
+
+function connectWebSocket() {
+    ws = new WebSocket(`${wsProtocol}//${location.host}`);
+
+    ws.onmessage = handleMessage;
+
+    ws.onclose = () => {
+        console.log('WebSocket disconnected. Reconnecting in 2 seconds...');
+        setTimeout(connectWebSocket, 2000);
+    };
+
+    ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+        ws.close();
+    };
+
+    // If reconnecting and we have a session, we should request a resync, but for now
+    // just reconnecting ensures we can send commands again. If the server restarted,
+    // the session is lost anyway. If just the browser tab suspended, the connection drops.
+}
+
+connectWebSocket();
 
 const chatLog = document.getElementById('chat-log');
 const actionInput = document.getElementById('action-input');
@@ -156,7 +178,7 @@ if (devToggleBtn && devPanel) {
     });
 }
 
-ws.onmessage = (event) => {
+function handleMessage(event) {
     try {
         const data = JSON.parse(event.data);
 
@@ -361,6 +383,9 @@ if (loadFileInput) {
                 // Скрыть стартовое меню при успешной загрузке
                 const overlay = document.getElementById('character-creation-overlay');
                 if (overlay) overlay.style.display = 'none';
+
+                // Show game screen just inside the app
+                document.getElementById('app').style.display = 'flex';
 
             } catch (err) {
                 alert("Ошибка чтения файла сохранения. Поврежден или неверный формат.");
