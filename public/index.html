@@ -15,8 +15,21 @@
 
 <body>
     <div id="app">
+        <!-- Password Gate -->
+        <div id="password-overlay" class="password-overlay">
+            <div class="creation-modal glass" style="max-width: 360px;">
+                <h2>Вход</h2>
+                <p class="creation-desc">Введите пароль для доступа к игре.</p>
+                <div class="form-group">
+                    <input type="password" id="password-input" placeholder="Пароль" autocomplete="off">
+                </div>
+                <div id="password-error" class="creation-error" style="display: none;"></div>
+                <button id="btn-password" class="action-btn primary-btn">Войти</button>
+            </div>
+        </div>
+
         <!-- Character Creation Overlay -->
-        <div id="character-creation-overlay" class="character-creation-overlay">
+        <div id="character-creation-overlay" class="character-creation-overlay" style="display: none;">
             <div class="creation-modal glass">
                 <h2>Кто вы в этом мире?</h2>
                 <p class="creation-desc">Вам предстоит выживать в суровой Богемии 1403 года. Назовите себя.</p>
@@ -96,7 +109,7 @@
         <main class="main-container">
             <!-- Central Play Area: Narrative & Input -->
             <section class="narrative-panel">
-                <!-- Картинка сцены (генерируется с каждым ходом). Временно скрыта, удалите style="display: none;" чтобы вернуть -->
+                <!-- Картинка сцены (генерируется на 1-м ходу и каждые 10 ходов) -->
                 <div id="scene-image-container" class="scene-image-container" style="display: none;"></div>
 
                 <div id="chat-log" class="chat-log">

@@ -69,17 +69,21 @@ wss.on('connection', (ws) => {
                 state.lastNarrative = narrative;
                 state.lastChoices = choices;
 
+                // Первый ход после создания персонажа = moveCount 1
+                state.moveCount = 1;
+                const shouldGenerateImage = true; // Всегда генерим на 1-м ходу
+
                 ws.send(JSON.stringify({
                     type: 'init',
                     state: state,
                     shortCode: state.toShortCode(),
                     message: narrative,
                     choices: choices,
-                    sessionId: sessionId
+                    sessionId: sessionId,
+                    imageExpected: shouldGenerateImage
                 }));
 
-                const ENABLE_IMAGES = false; // ВРЕМЕННО ОТКЛЮЧЕНО
-                if (ENABLE_IMAGES && imagePrompt) {
+                if (shouldGenerateImage && imagePrompt) {
                     const fullPrompt = `${IMAGE_HISTORY_PREFIX} ${imagePrompt}`;
                     generateSceneImage(fullPrompt)
                         .then(imageUrl => ws.send(JSON.stringify({ type: 'image_update', imageUrl: imageUrl })))
@@ -90,6 +94,7 @@ wss.on('connection', (ws) => {
             }
 
             if (data.type === 'action') {
+                state.moveCount = (state.moveCount || 0) + 1;
 
                 ws.send(JSON.stringify({ type: 'processing' }));
 
@@ -121,23 +126,26 @@ wss.on('connection', (ws) => {
                 state.lastNarrative = narrative;
                 state.lastChoices = choices;
 
+                // Генерируем картинку на ходу 1 (init) и далее каждые 10 ходов (11, 21, 31...)
+                const shouldGenerateImage = (state.moveCount % 10 === 1);
+
                 const outData = {
                     type: 'update',
                     state: state,
                     shortCode: state.toShortCode(),
                     message: narrative,
                     choices: choices,
-                    sessionId: sessionId
+                    sessionId: sessionId,
+                    imageExpected: shouldGenerateImage
                 };
 
                 // Отправляем текстовый ответ МГНОВЕННО
                 ws.send(JSON.stringify(outData));
 
                 // Асинхронно генерируем картинку и отправляем её позже
-                const ENABLE_IMAGES = false; // ВРЕМЕННО ОТКЛЮЧЕНО. Измените на true, чтобы вернуть генерацию.
-                if (ENABLE_IMAGES && imagePrompt) {
+                if (shouldGenerateImage && imagePrompt) {
                     const fullPrompt = `${IMAGE_HISTORY_PREFIX} ${imagePrompt}`;
-                    console.log(`[IMAGE] Prompt: ${fullPrompt.substring(0, 120)}...`);
+                    console.log(`[IMAGE] Move #${state.moveCount} — generating image. Prompt: ${fullPrompt.substring(0, 120)}...`);
 
                     generateSceneImage(fullPrompt)
                         .then(imageUrl => {
@@ -146,7 +154,7 @@ wss.on('connection', (ws) => {
                         })
                         .catch(imgErr => {
                             console.error('[IMAGE] Generation failed:', imgErr.message);
-                            ws.send(JSON.stringify({ type: 'image_update', imageUrl: null })); // сообщаем об ошибке
+                            ws.send(JSON.stringify({ type: 'image_update', imageUrl: null }));
                         });
                 }
             } else if (data.type === 'request_save') {
@@ -225,7 +233,7 @@ async function generateAIResponse(state, action) {
 2. Медленно прокачивать навыки. Если действие было успешным или дало важный урок, увеличь соответствующий навык на +1 или +2 в Short Code (не больше!). 
 
 СИСТЕМА ПАМЯТИ (История):
-В Short Code есть блок HIST:[]. Ты обязан САМ обновлять историю событий очень короткими глаголами/фактами через подчеркивание (максимум 20 штук), описывающими весь путь героя до текущего момента. 
+В Short Code есть блок HIST:[]. Ты обязан САМ обновлять историю событий очень короткими глаголами/фактами через подчеркивание (максимум 50 штук), описывающими весь путь героя до текущего момента. 
 Пример: HIST:[очнулся_в_грязи,нашел_траву,вытопил_масло,украл_вино,сделал_зелье]
 Добавляй 1-2 новых слова в конец массива на основе успешных или провальных действий, а самые старые удаляй. Никаких длинных фраз! Это твоя строгая краткая память.
 
@@ -317,104 +325,94 @@ function parseAIResponse(text) {
     };
 }
 
-let _currentForgeModel = null; // кэш: не переключаем если уже стоит нужная
-
 async function generateSceneImage(fullPrompt) {
-    if (process.env.LOCAL_IMAGE_GENERATION === 'true') {
-        const TARGET_MODEL = "chroma-flash-Q4_K_S.gguf";
-        const CLIP_L = "clip_l.safetensors";
-        const T5_ENCODER = "t5-v1_1-xxl-encoder-Q4_K_S.gguf";
-        const VAE = "ae.safetensors";
-
-        const payload = {
-            prompt: fullPrompt,
-            steps: 10,
-            width: 1024,
-            height: 576,
-            sampler_name: "Euler",
-            scheduler: "Simple",
-            cfg_scale: 1.0,
-            distilled_cfg_scale: 3.5,
-            override_settings: {
-                sd_model_checkpoint: TARGET_MODEL,
-                forge_additional_modules: [CLIP_L, T5_ENCODER, VAE],
-                forge_preset: "flux",
-                flux_GPU_MB: 5500
-            }
-        };
-
-        console.log(`[IMAGE] Generating with ${TARGET_MODEL}, T5, and VAE...`);
-
-        const res = await fetch("http://127.0.0.1:7860/sdapi/v1/txt2img", {
-            method: 'POST',
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(`Local Forge API error ${res.status}: ${errText}`);
-        }
-
-        const json = await res.json();
-        if (json.images && json.images[0]) {
-            console.log(`[IMAGE] Local Forge generation SUCCESS!`);
-            return `data:image/png;base64,${json.images[0]}`;
-        }
-        throw new Error("No image in local API response");
-    }
-
-    const url = "https://api.cometapi.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent";
+    const FLUX_URL = `https://api.cometapi.com/flux/v1/${IMAGE_MODEL}`;
 
     const payload = {
-        contents: [
-            {
-                role: "user",
-                parts: [{ text: fullPrompt }]
-            }
-        ],
-        generationConfig: {
-            responseModalities: ["IMAGE"],
-            // aspect_ratio не документировано в REST для Gemini, но попробуем добавить как в SDK
-            // если что, модель по умолчанию выдает 1:1
-        }
+        prompt: fullPrompt,
+        prompt_upsampling: true,
+        width: 1440,
+        height: 768,
+        steps: 30,
+        guidance: 5.0,
+        safety_tolerance: 3,
+        output_format: "jpeg"
     };
 
-    const res = await fetch(url, {
+    console.log(`[IMAGE] Generating with ${IMAGE_MODEL} via CometAPI...`);
+
+    const res = await fetch(FLUX_URL, {
         method: 'POST',
         headers: {
-            "x-goog-api-key": COMET_API_KEY, // Для gemini API ключ передаётся через этот заголовок (или через ?key=)
-            "Content-Type": "application/json"
+            'Authorization': COMET_API_KEY,
+            'Content-Type': 'application/json',
+            'Accept': '*/*'
         },
         body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`Gemini Image API error ${res.status}: ${errText}`);
+        throw new Error(`CometAPI Flux error ${res.status}: ${errText}`);
     }
 
     const json = await res.json();
 
-    // Ответ Gemini содержит структуру: { candidates: [ { content: { parts: [ { inlineData: { mimeType, data } } ] } } ] }
-    try {
-        const candidate = json.candidates[0];
-        const part = candidate.content.parts[0];
-
-        if (part.inlineData && part.inlineData.data) {
-            const mimeType = part.inlineData.mimeType || "image/jpeg";
-            const base64Data = part.inlineData.data;
-            console.log(`[IMAGE] Gemini generation SUCCESS!`);
-            return `data:${mimeType};base64,${base64Data}`;
-        } else if (part.text) {
-            throw new Error("Gemini returned text instead of image: " + part.text);
-        } else {
-            throw new Error("Gemini returned unknown part format: " + JSON.stringify(part));
-        }
-    } catch (parseErr) {
-        console.error("[IMAGE] Failed to parse Gemini response:", JSON.stringify(json));
-        throw new Error("Could not extract image from Gemini response");
+    // CometAPI flux возвращает результат с полем sample (URL картинки)
+    if (json.sample) {
+        console.log(`[IMAGE] Flux generation SUCCESS! URL: ${json.sample.substring(0, 80)}...`);
+        return json.sample;
     }
+
+    // Если пришёл id задачи, нужно опросить результат
+    if (json.id) {
+        console.log(`[IMAGE] Task submitted, id: ${json.id}. Polling for result...`);
+        return await pollFluxResult(json.id);
+    }
+
+    throw new Error("Unexpected CometAPI response: " + JSON.stringify(json));
+}
+
+async function pollFluxResult(taskId) {
+    const POLL_URL = `https://api.cometapi.com/flux/v1/get_result?id=${taskId}`;
+    const MAX_ATTEMPTS = 60;
+    const POLL_INTERVAL = 2000;
+
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+
+        const res = await fetch(POLL_URL, {
+            headers: {
+                'Authorization': COMET_API_KEY,
+                'Accept': '*/*'
+            }
+        });
+
+        if (!res.ok) continue;
+
+        const json = await res.json();
+
+        // CometAPI формат: { code: "success", data: { status: "SUCCESS", data: { sample: "url" } } }
+        const task = json.data || json;
+        const status = task.status || '';
+
+        if (status === 'SUCCESS' && task.data && task.data.sample) {
+            console.log(`[IMAGE] Poll success after ${i + 1} attempts`);
+            return task.data.sample;
+        }
+
+        // Старый формат (на случай изменения API)
+        if (status === 'Ready' && task.result && task.result.sample) {
+            console.log(`[IMAGE] Poll success (legacy format) after ${i + 1} attempts`);
+            return task.result.sample;
+        }
+
+        if (status === 'FAILED' || status === 'Error' || status === 'Request Moderated') {
+            throw new Error(`Flux task failed: ${status} — ${task.fail_reason || ''}`);
+        }
+    }
+
+    throw new Error(`Flux task timed out after ${MAX_ATTEMPTS} poll attempts`);
 }
 
 httpServer.listen(PORT, () => console.log(`🚀 New RPG Server running on port ${PORT}`));

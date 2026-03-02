@@ -1,3 +1,37 @@
+// ---- Password Gate ----
+(function() {
+    const overlay = document.getElementById('password-overlay');
+    const input = document.getElementById('password-input');
+    const btn = document.getElementById('btn-password');
+    const error = document.getElementById('password-error');
+    const PASS = '1859';
+
+    if (sessionStorage.getItem('rpg_auth') === '1') {
+        overlay.style.display = 'none';
+        document.getElementById('character-creation-overlay').style.display = 'flex';
+    }
+
+    function tryLogin() {
+        if (input.value === PASS) {
+            sessionStorage.setItem('rpg_auth', '1');
+            overlay.style.display = 'none';
+            document.getElementById('character-creation-overlay').style.display = 'flex';
+        } else {
+            error.textContent = 'Неверный пароль';
+            error.style.display = 'block';
+            error.style.color = '#ef4444';
+            error.classList.remove('shake');
+            void error.offsetWidth;
+            error.classList.add('shake');
+        }
+    }
+
+    btn.addEventListener('click', tryLogin);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') tryLogin();
+    });
+})();
+
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 let ws;
 
@@ -207,8 +241,13 @@ function handleMessage(event) {
             // Clear previous screen for a page-turn effect
             chatLog.innerHTML = '';
 
-            // Показываем картинку сцены (or skeleton if null)
-            showSceneImage(data.imageUrl || null, data.type === 'init');
+            // Показываем/скрываем контейнер картинки в зависимости от imageExpected
+            if (data.imageExpected) {
+                sceneImageContainer.style.display = '';
+                showSceneImage(null, false); // skeleton пока ждём
+            } else {
+                sceneImageContainer.style.display = 'none';
+            }
 
             // If it's an update after an action, show the player's action at the top
             if (data.type === 'update' && lastPlayerAction) {
@@ -278,11 +317,13 @@ function handleMessage(event) {
         else if (data.type === 'image_update') {
             // Асинхронно пришла картинка
             if (data.imageUrl) {
+                sceneImageContainer.style.display = '';
                 showSceneImage(data.imageUrl, false);
             } else {
-                // Ошибка генерации, убираем плейсхолдер
+                // Ошибка генерации — скрываем контейнер
                 if (sceneImageContainer) {
                     sceneImageContainer.innerHTML = '';
+                    sceneImageContainer.style.display = 'none';
                 }
             }
         }

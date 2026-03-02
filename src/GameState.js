@@ -30,6 +30,7 @@ export class GameState {
         this.narrativeLength = "long"; // default "long", can be "short"
         this.lastNarrative = "";
         this.lastChoices = [];
+        this.moveCount = 0; // Счётчик ходов (для генерации картинок)
     }
 
     // Восстановление состояния из JSON объекта
