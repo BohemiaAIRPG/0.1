@@ -280,11 +280,11 @@ ${state.toShortCode()}`;
             if (err) console.error('Ошибка записи лога ai_log.txt:', err);
         });
 
-        // Save context for future turns (max 8 elements: 4 user + 4 assistant)
+        // Save context for future turns (max 10 elements: 5 user + 5 assistant)
         state.dialogueContext.push({ role: 'user', content: `Действие игрока: "${action}"` });
         state.dialogueContext.push({ role: 'assistant', content: aiMessage });
-        if (state.dialogueContext.length > 8) {
-            state.dialogueContext = state.dialogueContext.slice(-8);
+        if (state.dialogueContext.length > 10) {
+            state.dialogueContext = state.dialogueContext.slice(-10);
         }
 
         return aiMessage;
