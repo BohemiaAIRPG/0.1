@@ -10,10 +10,6 @@ const PORT = process.env.PORT || 3000;
 const COMET_API_KEY = process.env.COMET_API_KEY;
 const COMET_API_BASE = 'https://api.cometapi.com/v1';
 const MODEL_NAME = 'deepseek-v3.2-exp';
-const IMAGE_MODEL = process.env.IMAGE_MODEL || 'flux-2-flex';
-
-// Хардкодный исторический контекст — всегда добавляется ПЕРЕД image_prompt от Grok
-const IMAGE_HISTORY_PREFIX = `maximum photorealism, historical realism, highly detailed medieval photography, captured on high-end camera, 8k resolution, cinematic lighting, muddy cobblestone streets, Kutna Hora Bohemia 1403, silver mining town, gothic architecture, candlelight, torchlight, dark and gritty atmosphere, muted earth tones, period-accurate clothing and tools —`;
 
 // Express App
 const app = express();
@@ -62,7 +58,7 @@ wss.on('connection', (ws) => {
 
                 const promptPayload = `Я - ${state.name}, ${state.age}-летни${state.gender === 'Мужчина' ? 'й' : 'я'} ${state.gender === 'Мужчина' ? 'мужчина' : 'женщина'}. Я только что очнулся в грязи. Осмотреться.`;
                 const response = await generateAIResponse(state, promptPayload);
-                const { narrative, newShortCode, choices, imagePrompt } = parseAIResponse(response);
+                const { narrative, newShortCode, choices } = parseAIResponse(response);
 
                 if (newShortCode) state.updateFromShortCode(newShortCode);
 
@@ -71,7 +67,6 @@ wss.on('connection', (ws) => {
 
                 // Первый ход после создания персонажа = moveCount 1
                 state.moveCount = 1;
-                const shouldGenerateImage = true; // Всегда генерим на 1-м ходу
 
                 ws.send(JSON.stringify({
                     type: 'init',
@@ -79,16 +74,8 @@ wss.on('connection', (ws) => {
                     shortCode: state.toShortCode(),
                     message: narrative,
                     choices: choices,
-                    sessionId: sessionId,
-                    imageExpected: shouldGenerateImage
+                    sessionId: sessionId
                 }));
-
-                if (shouldGenerateImage && imagePrompt) {
-                    const fullPrompt = `${IMAGE_HISTORY_PREFIX} ${imagePrompt}`;
-                    generateSceneImage(fullPrompt)
-                        .then(imageUrl => ws.send(JSON.stringify({ type: 'image_update', imageUrl: imageUrl })))
-                        .catch(() => ws.send(JSON.stringify({ type: 'image_update', imageUrl: null })));
-                }
 
                 return;
             }
@@ -101,7 +88,7 @@ wss.on('connection', (ws) => {
                 const response = await generateAIResponse(state, data.action);
 
                 // Парсим ответ ИИ
-                const { narrative, newShortCode, choices, imagePrompt } = parseAIResponse(response);
+                const { narrative, newShortCode, choices } = parseAIResponse(response);
 
                 // Создаем снимок старого состояния до применения ShortCode
                 const oldState = {
@@ -126,37 +113,14 @@ wss.on('connection', (ws) => {
                 state.lastNarrative = narrative;
                 state.lastChoices = choices;
 
-                // Генерируем картинку на ходу 1 (init) и далее каждые 10 ходов (11, 21, 31...)
-                const shouldGenerateImage = (state.moveCount % 10 === 1);
-
-                const outData = {
+                ws.send(JSON.stringify({
                     type: 'update',
                     state: state,
                     shortCode: state.toShortCode(),
                     message: narrative,
                     choices: choices,
-                    sessionId: sessionId,
-                    imageExpected: shouldGenerateImage
-                };
-
-                // Отправляем текстовый ответ МГНОВЕННО
-                ws.send(JSON.stringify(outData));
-
-                // Асинхронно генерируем картинку и отправляем её позже
-                if (shouldGenerateImage && imagePrompt) {
-                    const fullPrompt = `${IMAGE_HISTORY_PREFIX} ${imagePrompt}`;
-                    console.log(`[IMAGE] Move #${state.moveCount} — generating image. Prompt: ${fullPrompt.substring(0, 120)}...`);
-
-                    generateSceneImage(fullPrompt)
-                        .then(imageUrl => {
-                            console.log(`[IMAGE] Generated and sent to client`);
-                            ws.send(JSON.stringify({ type: 'image_update', imageUrl: imageUrl }));
-                        })
-                        .catch(imgErr => {
-                            console.error('[IMAGE] Generation failed:', imgErr.message);
-                            ws.send(JSON.stringify({ type: 'image_update', imageUrl: null }));
-                        });
-                }
+                    sessionId: sessionId
+                }));
             } else if (data.type === 'request_save') {
                 const state = sessions.get(sessionId);
                 ws.send(JSON.stringify({
@@ -204,10 +168,6 @@ async function generateAIResponse(state, action) {
 [NARRATIVE]
 (Здесь ТОЛЬКО твой атмосферный художественный ответ. Опиши последствия действия, звуки, запахи, эмоции. СТРОГО ЗАПРЕЩЕНО писать здесь любые числа, статы, дельты вроде "HP -10" или "COIN +5" или "HP:35/100|STA:30/100" — игрок видит ТОЛЬКО литературный текст! Все изменения характеристик отражай ТОЛЬКО в блоке [SHORTCODE].)
 [/NARRATIVE]
-
-[IMAGE_PROMPT]
-(Напиши ТОЛЬКО на английском языке, 50-70 слов. Опиши визуально то, что видит игрок прямо сейчас: окружение, освещение, людей рядом, погоду. БЕЗ действий, только статичная сцена. Стиль: темная реалистичная живопись. Пример: "A dark narrow alley between timber-framed houses, torch flickering on wet cobblestones, a hooded figure standing by a wooden cart loaded with silver ore, fog rising from the ground, night sky visible above")
-[/IMAGE_PROMPT]
 
 [CHOICES]
 ["Вариант 1", "Вариант 2", "Вариант 3"]
@@ -306,8 +266,6 @@ function parseAIResponse(text) {
     const narrativeMatch = text.match(/\[NARRATIVE\]([\s\S]*?)\[\/NARRATIVE\]/);
     const shortcodeMatch = text.match(/\[SHORTCODE\]([\s\S]*?)\[\/SHORTCODE\]/);
     const choicesMatch = text.match(/\[CHOICES\]([\s\S]*?)\[\/CHOICES\]/);
-    const imagePromptMatch = text.match(/\[IMAGE_PROMPT\]([\s\S]*?)\[\/IMAGE_PROMPT\]/);
-
     let choices = [];
     if (choicesMatch) {
         try {
@@ -320,99 +278,8 @@ function parseAIResponse(text) {
     return {
         narrative: narrativeMatch ? narrativeMatch[1].trim() : "...",
         newShortCode: shortcodeMatch ? shortcodeMatch[1].trim() : null,
-        choices: choices,
-        imagePrompt: imagePromptMatch ? imagePromptMatch[1].trim() : null
+        choices: choices
     };
-}
-
-async function generateSceneImage(fullPrompt) {
-    const FLUX_URL = `https://api.cometapi.com/flux/v1/${IMAGE_MODEL}`;
-
-    const payload = {
-        prompt: fullPrompt,
-        prompt_upsampling: true,
-        width: 1440,
-        height: 768,
-        steps: 30,
-        guidance: 5.0,
-        safety_tolerance: 3,
-        output_format: "jpeg"
-    };
-
-    console.log(`[IMAGE] Generating with ${IMAGE_MODEL} via CometAPI...`);
-
-    const res = await fetch(FLUX_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': COMET_API_KEY,
-            'Content-Type': 'application/json',
-            'Accept': '*/*'
-        },
-        body: JSON.stringify(payload)
-    });
-
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`CometAPI Flux error ${res.status}: ${errText}`);
-    }
-
-    const json = await res.json();
-
-    // CometAPI flux возвращает результат с полем sample (URL картинки)
-    if (json.sample) {
-        console.log(`[IMAGE] Flux generation SUCCESS! URL: ${json.sample.substring(0, 80)}...`);
-        return json.sample;
-    }
-
-    // Если пришёл id задачи, нужно опросить результат
-    if (json.id) {
-        console.log(`[IMAGE] Task submitted, id: ${json.id}. Polling for result...`);
-        return await pollFluxResult(json.id);
-    }
-
-    throw new Error("Unexpected CometAPI response: " + JSON.stringify(json));
-}
-
-async function pollFluxResult(taskId) {
-    const POLL_URL = `https://api.cometapi.com/flux/v1/get_result?id=${taskId}`;
-    const MAX_ATTEMPTS = 60;
-    const POLL_INTERVAL = 2000;
-
-    for (let i = 0; i < MAX_ATTEMPTS; i++) {
-        await new Promise(r => setTimeout(r, POLL_INTERVAL));
-
-        const res = await fetch(POLL_URL, {
-            headers: {
-                'Authorization': COMET_API_KEY,
-                'Accept': '*/*'
-            }
-        });
-
-        if (!res.ok) continue;
-
-        const json = await res.json();
-
-        // CometAPI формат: { code: "success", data: { status: "SUCCESS", data: { sample: "url" } } }
-        const task = json.data || json;
-        const status = task.status || '';
-
-        if (status === 'SUCCESS' && task.data && task.data.sample) {
-            console.log(`[IMAGE] Poll success after ${i + 1} attempts`);
-            return task.data.sample;
-        }
-
-        // Старый формат (на случай изменения API)
-        if (status === 'Ready' && task.result && task.result.sample) {
-            console.log(`[IMAGE] Poll success (legacy format) after ${i + 1} attempts`);
-            return task.result.sample;
-        }
-
-        if (status === 'FAILED' || status === 'Error' || status === 'Request Moderated') {
-            throw new Error(`Flux task failed: ${status} — ${task.fail_reason || ''}`);
-        }
-    }
-
-    throw new Error(`Flux task timed out after ${MAX_ATTEMPTS} poll attempts`);
 }
 
 httpServer.listen(PORT, () => console.log(`🚀 New RPG Server running on port ${PORT}`));
