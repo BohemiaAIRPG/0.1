@@ -220,7 +220,7 @@ export class GameState {
                     else if (p.startsWith('HIST:[')) {
                         const histm = p.substring(6, p.length - 1);
                         if (histm) {
-                            this.history = histm.split(',').map(s => s.trim().replace(/ /g, '_')).filter(s => s.length > 0).slice(-50);
+                            this.history = histm.split(',').map(s => s.trim().replace(/ /g, '_')).filter(s => s.length > 0).slice(-25);
                         }
                     }
                 }
