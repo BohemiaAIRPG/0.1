@@ -1,3 +1,9 @@
+// Если есть сохранённая игра — скрываем создание персонажа сразу (до подключения WS)
+if (sessionStorage.getItem('rpg_game_state')) {
+    const overlay = document.getElementById('character-creation-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
 const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
 let ws;
 
@@ -5,6 +11,19 @@ function connectWebSocket() {
     ws = new WebSocket(`${wsProtocol}//${location.host}`);
 
     ws.onopen = () => {
+        // Авто-восстановление из sessionStorage (переживает F5)
+        const savedGameState = sessionStorage.getItem('rpg_game_state');
+        if (savedGameState) {
+            try {
+                const parsedState = JSON.parse(savedGameState);
+                ws.send(JSON.stringify({ type: 'load_state', state: parsedState }));
+                return;
+            } catch (e) {
+                console.error('Failed to parse saved game state', e);
+                sessionStorage.removeItem('rpg_game_state');
+            }
+        }
+        // Фолбэк: пробуем серверный reconnect
         const savedSessionId = localStorage.getItem('rpg_session_id');
         if (savedSessionId) {
             ws.send(JSON.stringify({ type: 'reconnect', sessionId: savedSessionId }));
@@ -150,6 +169,7 @@ if (btnStartGame) {
 if (btnRestartGame) {
     btnRestartGame.addEventListener('click', () => {
         localStorage.removeItem('rpg_session_id');
+        sessionStorage.removeItem('rpg_game_state');
         location.reload();
     });
 }
@@ -197,6 +217,9 @@ function handleMessage(event) {
             actionInput.disabled = false;
             sendBtn.disabled = false;
             actionInput.focus();
+
+            // Скрыть оверлей создания персонажа (важно при авто-восстановлении после F5)
+            if (charOverlay) charOverlay.style.display = 'none';
 
             if (data.sessionId) {
                 localStorage.setItem('rpg_session_id', data.sessionId);
@@ -248,8 +271,14 @@ function handleMessage(event) {
             // Update State
             if (data.state) {
                 updateUIState(data.state);
+                // Авто-сохранение в sessionStorage для восстановления при F5
+                sessionStorage.setItem('rpg_game_state', JSON.stringify(data.state));
                 if (data.state.health <= 0) {
                     gameOverOverlay.style.display = 'flex';
+                }
+                // Синхронизация настройки длины текста
+                if (data.state.narrativeLength && narrativeLengthSelect) {
+                    narrativeLengthSelect.value = data.state.narrativeLength;
                 }
             }
             if (data.shortCode) {
@@ -265,8 +294,18 @@ function handleMessage(event) {
             aiChoicesContainer.classList.remove('visible');
         }
         else if (data.type === 'reconnect_failed') {
-            // Если сервер перезагружался (сессия пропала из памяти), нужно просто сбросить всё и показать главное меню
             localStorage.removeItem('rpg_session_id');
+            // Пробуем восстановить из sessionStorage
+            const savedGameState = sessionStorage.getItem('rpg_game_state');
+            if (savedGameState && ws.readyState === WebSocket.OPEN) {
+                try {
+                    ws.send(JSON.stringify({ type: 'load_state', state: JSON.parse(savedGameState) }));
+                    return;
+                } catch (e) {
+                    sessionStorage.removeItem('rpg_game_state');
+                }
+            }
+            // Если нечего восстанавливать — показываем создание персонажа
             const overlay = document.getElementById('character-creation-overlay');
             if (overlay) overlay.style.display = 'flex';
         }
